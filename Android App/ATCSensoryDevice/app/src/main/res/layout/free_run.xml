@@ -1,0 +1,210 @@
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <androidx.constraintlayout.widget.ConstraintLayout
+            style="@style/backgroundOne"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <Button
+                android:id="@+id/activateButton"
+                android:layout_width="87dp"
+                android:layout_height="42dp"
+                android:layout_marginTop="16dp"
+                android:backgroundTint="@android:color/darker_gray"
+                android:clickable="false"
+                android:text="@string/start"
+                android:textColor="@color/black"
+                app:iconTint="#AA9999"
+                app:layout_constraintBottom_toTopOf="@id/graphCardView"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/freeRunPressureCardView"
+                app:layout_constraintVertical_bias="0.0" />
+
+            <androidx.cardview.widget.CardView
+                android:id="@+id/freeRunPressureCardView"
+                style="@style/backgroundOne"
+                android:layout_width="228dp"
+                android:layout_height="44dp"
+                android:layout_marginTop="24dp"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintHorizontal_bias="0.502"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/frseekBar">
+
+                <TableRow
+                    android:id="@+id/tableRow"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent">
+
+                    <TextView
+                        android:id="@+id/pressureTitle"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_marginTop="0dp"
+                        android:layout_weight="1"
+                        android:gravity="center"
+                        android:text="Target:"
+                        android:textAlignment="center" />
+
+                    <TextView
+                        android:id="@+id/frpressureNumber"
+                        style="@style/defaultText"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_marginTop="0dp"
+                        android:layout_weight="1"
+                        android:gravity="center"
+                        android:textAlignment="center" />
+                </TableRow>
+
+            </androidx.cardview.widget.CardView>
+
+            <SeekBar
+                android:id="@+id/frseekBar"
+                android:layout_width="294dp"
+                android:layout_height="16dp"
+                android:indeterminate="false"
+                android:max="10"
+                android:progress="0"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintHorizontal_bias="0.495"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/frpairButton"
+                app:layout_constraintVertical_bias="0.213" />
+
+            <Button
+                android:id="@+id/frpairButton"
+                style="@style/defaultButton2"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/pair_device"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintHorizontal_bias="0.498"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/freeRunTitle"
+                app:layout_constraintVertical_bias="0.045" />
+
+            <TextView
+                android:id="@+id/freeRunTitle"
+                style="@style/titleStyle"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/free_run"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintHorizontal_bias="0.5"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintVertical_bias="0.057" />
+
+            <androidx.cardview.widget.CardView
+                android:id="@+id/pairedDeviceInfoCardView"
+                style="@style/backgroundOne"
+                android:layout_width="280dp"
+                android:layout_height="61dp"
+                app:layout_constraintBottom_toTopOf="@+id/frseekBar"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/frpairButton">
+
+                <TableLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent">
+
+                    <TableRow
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1">
+
+                        <TextView
+                            android:id="@+id/deviceNameLabel"
+                            style="@style/defaultText"
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="1"
+                            android:gravity="center|left"
+                            android:paddingHorizontal="10dp"
+                            android:text="Device Name:" />
+
+                        <TextView
+                            android:id="@+id/deviceName"
+                            style="@style/secondaryText"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:paddingHorizontal="10dp"
+                            android:text="N/A"
+                            android:textAlignment="center" />
+
+                    </TableRow>
+
+                    <TableRow
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1">
+
+                        <TextView
+                            android:id="@+id/deviceAddressLabel"
+                            style="@style/defaultText"
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="1"
+                            android:gravity="center|left"
+                            android:paddingHorizontal="10dp"
+                            android:text="MAC Address:" />
+
+                        <TextView
+                            android:id="@+id/deviceAddress"
+                            style="@style/secondaryText"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:paddingHorizontal="10dp"
+                            android:text="N/A"
+                            android:textAlignment="center" />
+
+                    </TableRow>
+
+                </TableLayout>
+
+            </androidx.cardview.widget.CardView>
+
+            <androidx.cardview.widget.CardView
+                android:id="@+id/graphCardView"
+                style="@style/backgroundOne"
+                android:layout_width="373dp"
+                android:layout_height="234dp"
+                android:layout_marginLeft="32dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginRight="32dp"
+                android:layout_marginBottom="32dp"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/activateButton">
+
+                <com.jjoe64.graphview.GraphView
+                    android:id="@+id/livePressurePlot"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_margin="10dp" />
+
+            </androidx.cardview.widget.CardView>
+        </androidx.constraintlayout.widget.ConstraintLayout>
+    </LinearLayout>
+</ScrollView>

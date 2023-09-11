@@ -1,0 +1,252 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    style="@style/backgroundOne"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <TextView
+        android:id="@+id/addTitle"
+        style="@style/titleStyle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_margin="32dp"
+        android:text="@string/edit_add_profile"
+        app:layout_constraintBottom_toTopOf="@id/profileScroll"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="1.0" />
+
+    <ScrollView
+        android:id="@+id/profileScroll"
+        android:layout_width="match_parent"
+        android:layout_height="540dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintHorizontal_bias="0.5"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.5">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content">
+
+                <!--<ImageView
+                    android:id="@+id/profileImage"
+                    android:layout_width="50dp"
+                    android:layout_height="50dp"
+                    android:layout_margin="10dp"
+                    tools:srcCompat="@drawable/ic_baseline_account_box_24" />-->
+
+                <com.google.android.material.textfield.TextInputEditText
+                    android:id="@+id/inputFieldName"
+                    android:layout_width="250dp"
+                    android:layout_height="50dp"
+                    android:layout_margin="10dp"
+                    android:hint="@string/name"
+                    android:singleLine="true" />
+
+            </LinearLayout>
+
+            <!--<Button
+                android:id="@+id/uploadImageButton"
+                style="@style/defaultButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Upload Image"
+                android:textAlignment="center"
+                android:textSize="12dp" />-->
+
+            <SeekBar
+                android:id="@+id/seekBar"
+                android:layout_width="294dp"
+                android:layout_height="16dp"
+                android:layout_margin="10dp"
+                android:indeterminate="false"
+                android:max="10"
+                android:progress="0" />
+
+            <androidx.cardview.widget.CardView
+                android:id="@+id/addProfilePressureCardView"
+                android:layout_width="228dp"
+                android:layout_height="44dp"
+                android:layout_marginTop="24dp">
+
+                <TableRow
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent">
+
+                    <TextView
+                        android:id="@+id/pressureTitle2"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:gravity="center"
+                        android:text="@string/target"
+                        android:textAlignment="center" />
+
+                    <TextView
+                        android:id="@+id/pressureNumber"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:gravity="center"
+                        android:textAlignment="center" />
+                </TableRow>
+
+            </androidx.cardview.widget.CardView>
+
+            <androidx.cardview.widget.CardView
+                android:id="@+id/cardView"
+                android:layout_width="280dp"
+                android:layout_height="61dp"
+                android:layout_marginTop="24dp">
+
+                <TableLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent">
+
+                    <TableRow
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1">
+
+                        <TextView
+                            android:id="@+id/deviceNameLabel"
+                            style="@style/defaultText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="match_parent"
+                            android:layout_weight="1"
+                            android:gravity="center|start"
+                            android:paddingHorizontal="10dp"
+                            android:text="@string/device_name" />
+
+                        <TextView
+                            android:id="@+id/deviceName"
+                            style="@style/secondaryText"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:paddingHorizontal="10dp"
+                            android:text="@string/n_a"
+                            android:textAlignment="center" />
+
+                    </TableRow>
+
+                    <TableRow
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1">
+
+                        <TextView
+                            android:id="@+id/deviceAddressLabel"
+                            style="@style/defaultText"
+                            android:layout_width="wrap_content"
+                            android:layout_height="match_parent"
+                            android:layout_weight="1"
+                            android:gravity="center|start"
+                            android:paddingHorizontal="10dp"
+                            android:text="@string/mac_address" />
+
+                        <TextView
+                            android:id="@+id/deviceAddress"
+                            style="@style/secondaryText"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:paddingHorizontal="10dp"
+                            android:text="@string/n_a"
+                            android:textAlignment="center" />
+
+                    </TableRow>
+
+                </TableLayout>
+
+            </androidx.cardview.widget.CardView>
+
+            <Button
+                android:id="@+id/pairButton"
+                style="@style/defaultButton2"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="20dp"
+                android:text="@string/pair_device" />
+
+            <Button
+                android:id="@+id/testButton"
+                android:layout_width="73dp"
+                android:layout_height="38dp"
+                android:layout_margin="15dp"
+                android:backgroundTint="@android:color/darker_gray"
+                android:clickable="false"
+                android:text="@string/test"
+                app:iconTint="#AA9999" />
+
+            <androidx.cardview.widget.CardView
+                android:id="@+id/graphCardView"
+                style="@style/backgroundOne"
+                android:layout_width="373dp"
+                android:layout_height="234dp"
+                android:layout_marginLeft="32dp"
+                android:layout_marginTop="8dp"
+                android:layout_marginRight="32dp"
+                android:layout_marginBottom="32dp"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toBottomOf="@+id/activateButton">
+
+                <com.jjoe64.graphview.GraphView
+                    android:id="@+id/livePressurePlot"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:layout_margin="10dp" />
+
+            </androidx.cardview.widget.CardView>
+
+        </LinearLayout>
+
+    </ScrollView>
+
+    <LinearLayout
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/profileScroll">
+
+        <Button
+            android:id="@+id/cancelButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_margin="32dp"
+            android:text="@string/cancel"
+            app:layout_constraintVertical_bias="0.953"
+            style="@style/defaultButton" />
+
+        <Button
+            android:id="@+id/addProfileButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:layout_margin="32dp"
+            android:text="@string/save_profile"
+            app:layout_constraintVertical_bias="0.953"
+            style="@style/defaultButton2" />
+
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

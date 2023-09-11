@@ -1,0 +1,1 @@
+The ACCESS_FINE_LOCATION permission is required for Bluetooth scanning because discoverable devices may return information about the user's location. In order for the device to use the ACCESS_FINE_LOCATION permission, the ACCESS_COURSE_LOCATION permission must also be granted. This permission will not be used for any other function. (Added: API Level 1)
