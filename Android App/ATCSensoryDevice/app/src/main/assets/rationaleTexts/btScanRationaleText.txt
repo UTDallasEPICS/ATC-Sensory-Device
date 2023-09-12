@@ -1,1 +1,0 @@
-The BLUETOOTH_SCAN permission is required for your device to discover and pair with nearby Bluetooth and BluetoothLE devices. (Added: API Level 31)

@@ -1,1 +1,0 @@
-The BLUETOOTH_ADMIN permission is required for your device to initiate Bluetooth device discovery. Without it, this application would not be able to scan for ATC devices. (Added: API Level 1)

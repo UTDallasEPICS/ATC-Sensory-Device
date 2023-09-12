@@ -1,1 +1,0 @@
-The BLUETOOTH_CONNECT permission is required for your device to be able to connect to paired Bluetooth or BluetoothLE devices. (Added: API Level 31)
