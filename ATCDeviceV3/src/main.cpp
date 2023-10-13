@@ -1,0 +1,335 @@
+/* Authors:
+            Sasha Kaplan  Github: Sashakap, Alexander de Bont,
+            Harold F      Github:
+            Varsha Thomas Github: VT_c0des
+            Rohan Thomas  Github:
+ * Engineering Projects in Community Service (EPICS), UTDallas
+ * Project: Autism Treatment Center of Dallas - Sensory Device
+*/
+
+#include <Arduino.h>
+#include <string.h>
+#include <Wire.h>           // Wire Library - Version: Latest
+#include <Adafruit_MPRLS.h> // Adafruit MPRLS Library - Version: Latest
+#include <heltec.h>         // Heltec ESP32 Dev-Boards - Version: Latest
+#include "images.h"
+
+// BLE Headers
+#include <BLEDevice.h>
+#include <BLEServer.h>
+#include <BLEUtils.h>
+#include <BLE2902.h>
+
+// Custom I2C Pins
+#define I2C_SCL 42
+#define I2C_SDA 41
+TwoWire I2CMPR = TwoWire(1);
+
+// MPRLS Setup
+#define RESET_PIN -1 // set to any GPIO pin # to hard-reset on begin()
+#define EOC_PIN -1   // set to any GPIO pin to read end-of-conversion by pin
+Adafruit_MPRLS mpr;
+
+// GPIO Pins
+#define motor 19 // Motor GPIO Pin
+#define valve 34 // Valve GPIO Pin
+
+// Define BLE Service
+#define SERVICE_UUID "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"           // UART service UUID
+#define CHARACTERISTIC_UUID_RX "6E400002-B5A3-F393-E0A9-E50E24DCCA9E" // For Receiving Values from Phone
+#define CHARACTERISTIC_UUID_TX "6E400003-B5A3-F393-E0A9-E50E24DCCA9E" // For Transmitting Values to Phone
+
+#define DEVICE_NAME "ATC_3"
+
+// Reading Messages from Mobile App
+typedef unsigned char uchar;
+float pressureTarget = -1;
+
+// Function Prototypes
+float getPressure();
+void standby();
+float byteArrayToFloat(byte, byte, byte, byte);
+void startBLESetup();
+void setupOLED();
+void readyMessage();
+void drawMonitor(float, float);
+void drawString(String);
+
+// Pressure Regulation Data
+const int DELAY_TIME = 250; // Periodically check pressure
+double pressureAmbiant;
+bool motorAlreadyOn = false;
+bool valveAlreadyOn = false;
+bool deviceConnected = false;
+bool oldDeviceConnected = false;
+
+// BLE Fields
+BLEServer *pServer = NULL;
+BLECharacteristic *pTxCharacteristic;
+
+// Class that checks for server callbacks
+class MyServerCallbacks : public BLEServerCallbacks
+{
+  void onConnect(BLEServer *pServer)
+  {
+    Serial.println("Device Connected");
+    deviceConnected = true;
+  }
+
+  void onDisconnect(BLEServer *pServer)
+  {
+    Serial.println("Device Disconnected");
+    deviceConnected = false;
+    standby();
+  }
+};
+
+class MyCallbacks : public BLECharacteristicCallbacks
+{
+  // After a notification is received that the characterstic value changed (i.e., data was sent from the phone)
+  void onWrite(BLECharacteristic *pCharacteristic)
+  {
+    std::string rxValue = pCharacteristic->getValue();
+    Serial.print(F("rxValue -> "));
+    Serial.println(rxValue.c_str());
+
+    // Create Byte Array from String
+    // A float is a 32-bit datatype (4 bytes)
+    uchar rxBytes[rxValue.length()];
+    memcpy(rxBytes, rxValue.data(), rxValue.length());
+
+    Serial.print("rxLength: " + String(rxValue.length())); //
+    Serial.println();                                      //
+    int length = sizeof(rxBytes) / sizeof(rxBytes[0]);     //  Debugging
+    for (int i = 0; i < length; i++)
+    { //
+      Serial.print(rxBytes[i], HEX);
+    } //
+
+    Serial.println("\n*********");
+    Serial.print("Received Value: ");
+    // Convert byte array to floating point number
+    // This copies the values of the bytes of rxBytes directly to the memory location pointed to by pressureTarget
+    // memcpy(&pressureTarget, &rxBytes, sizeof(pressureTarget));
+    pressureTarget = byteArrayToFloat(rxBytes[0], rxBytes[1], rxBytes[2], rxBytes[3]);
+    Serial.print(String(pressureTarget));
+    Serial.println("\n*********");
+
+    if (pressureTarget < 0)
+    {
+      standby();
+    }
+  }
+};
+
+// Main method
+void setup()
+{
+  // Serial Setup & OLED Setup
+  Serial.begin(115200);
+  setupOLED();
+
+  // Custom I2C Pins & MPRLS Setup
+  I2CMPR.begin(I2C_SDA, I2C_SCL, 400000);
+  bool status = mpr.begin(0x18, &I2CMPR);
+
+  // GPIO Setup
+  pinMode(motor, OUTPUT);
+  pinMode(valve, OUTPUT);
+
+  // Check That MPRLS Sensor is Connected
+  if (!status)
+  {
+    drawString("MPRLS Undetected, Cannot Proceed");
+    while (!status)
+    {
+      delay(10);
+    }
+  }
+  else
+  {
+    drawString("MPRLS Detected!");
+    delay(1000);
+  }
+
+  // Begin BluetoothLE GATT Server
+  startBLESetup();
+}
+
+void loop()
+{
+  // Idle
+  if (deviceConnected)
+  {
+    oldDeviceConnected = true;
+
+    // Send Pressure Data to Phone
+    float pressureBladder = getPressure(); // Pressure in PSI
+    pTxCharacteristic->setValue(pressureBladder);
+    pTxCharacteristic->notify();
+    delay(10); // bluetooth stack will go into congestion, if too many packets are sent
+
+    // OLED Display
+    drawMonitor(pressureBladder, pressureTarget);
+
+    //-------------------------------------------------------------
+
+    if (pressureTarget >= 0)
+    {
+      String pressureMessage = "";
+
+      // Over Target
+      if ((pressureBladder > pressureTarget) && !motorAlreadyOn)
+      {
+        motorAlreadyOn = true;
+        valveAlreadyOn = false;
+        pressureMessage = "PSI: " + String(pressureBladder);
+        // Serial.println(pressureMessage + "Over Target");
+        // Will continue a cycle of releasing air as long as the target pressure is lower than the pressure in the bladder
+        // Activate the release valve
+        digitalWrite(valve, HIGH);
+        digitalWrite(motor, LOW);
+      }
+      // Under Target
+      else if ((pressureBladder < pressureTarget) && !valveAlreadyOn)
+      {
+        valveAlreadyOn = true;
+        motorAlreadyOn = false;
+        pressureMessage = "PSI: " + String(pressureBladder);
+        // Serial.println(pressureMessage + "Under Target");
+        // Will continue a cycle of pumping air as long as the target pressure is higher than the pressure in the bladder
+        digitalWrite(motor, HIGH);
+        digitalWrite(valve, LOW);
+      }
+      // On Target
+      else
+      {
+        // Unlikely edge case that pressure is exactly where desired
+        // Serial.println("Target Aquired");
+      }
+
+      if (pressureBladder > 15.6)
+      {
+        Heltec.display->clear();
+        Heltec.display->drawXbm(0, 0, smile_width, smile_height, smile_bits);
+        Heltec.display->display();
+      }
+    }
+    delay(DELAY_TIME);
+    //-------------------------------------------------------------
+  }
+
+  // disconnecting
+  if (!deviceConnected && oldDeviceConnected)
+  {
+    Serial.println("Device Disconnected");
+    delay(500);                  // give the bluetooth stack the chance to get things ready
+    pServer->startAdvertising(); // restart advertising
+    Serial.println("Advertising Restarted");
+    deviceConnected = false;
+    oldDeviceConnected = false;
+    readyMessage();
+  }
+}
+
+//===================Auxilliary Methods===================
+// Fills up the bladder with 0 to PSI_LIMIT
+float getPressure()
+{
+  return mpr.readPressure() / 68.947572932;
+}
+
+void standby()
+{
+  digitalWrite(motor, LOW);
+  digitalWrite(valve, LOW);
+  motorAlreadyOn = false;
+  valveAlreadyOn = false;
+}
+
+float byteArrayToFloat(uchar b0, uchar b1, uchar b2, uchar b3)
+{
+  // Intepret the 4 bytes as floating point in Big Endian
+  float result;
+  uchar byte_array[] = {b3, b2, b1, b0};
+  std::copy(reinterpret_cast<const char *>(&byte_array[0]), reinterpret_cast<const char *>(&byte_array[4]), reinterpret_cast<char *>(&result));
+  return result;
+}
+
+//===================Setup Methods===================
+void startBLESetup()
+{
+  // Create the BLE Device
+  BLEDevice::init(DEVICE_NAME);
+
+  // Create the BLE Server
+  pServer = BLEDevice::createServer();
+  pServer->setCallbacks(new MyServerCallbacks());
+
+  // Create the BLE Service
+  BLEService *pService = pServer->createService(SERVICE_UUID);
+
+  // Create a BLE Characteristics
+
+  // TX Characteristic (Send Data to Mobile Device)
+  pTxCharacteristic = pService->createCharacteristic(CHARACTERISTIC_UUID_TX, BLECharacteristic::PROPERTY_NOTIFY);
+  pTxCharacteristic->addDescriptor(new BLE2902());
+
+  // RX Characteristic (Receive Data from Mobile Device)
+  BLECharacteristic *pRxCharacteristic = pService->createCharacteristic(CHARACTERISTIC_UUID_RX, BLECharacteristic::PROPERTY_WRITE);
+  pRxCharacteristic->setCallbacks(new MyCallbacks());
+
+  // Start the service
+  pService->start();
+
+  // Start advertising
+  pServer->getAdvertising()->addServiceUUID(pService->getUUID());
+  pServer->getAdvertising()->start();
+  Serial.println("Waiting a client connection to notify...");
+  readyMessage();
+}
+
+//=================================OLED Drawing======================================
+
+void setupOLED()
+{
+  // OLED Splash Screen
+  Heltec.begin(true /*DisplayEnable Enable*/, false /*LoRa Disable*/, true /*Serial Enable*/);
+  Heltec.display->setFont(ArialMT_Plain_10);
+  Heltec.display->setTextAlignment(TEXT_ALIGN_CENTER);
+  Heltec.display->clear();
+  Heltec.display->drawXbm(0, 0, EPICS_Logo_width, EPICS_Logo_height, EPICS_Logo_bits);
+  Heltec.display->display();
+  delay(3000);
+  Heltec.display->clear();
+  Heltec.display->drawXbm(0, 11, ATC_Logo_width, ATC_Logo_height, ATC_Logo_bits);
+  Heltec.display->display();
+  delay(3000);
+}
+
+void readyMessage()
+{
+  Heltec.display->clear();
+  Heltec.display->setTextAlignment(TEXT_ALIGN_CENTER);
+  String readyMessage = "GATT Server Started as '" + String(DEVICE_NAME) + "'";
+  Heltec.display->drawStringMaxWidth(64, 10, 128, readyMessage);
+  Heltec.display->display();
+}
+
+void drawString(String msg)
+{
+  Heltec.display->clear();
+  Heltec.display->drawStringMaxWidth(64, 10, 128, msg);
+  Heltec.display->display();
+}
+
+void drawMonitor(float pBladder, float pTarget)
+{
+  Heltec.display->clear();
+  Heltec.display->setTextAlignment(TEXT_ALIGN_LEFT);
+  Heltec.display->drawXbm(0, 0, target_icon_width, target_icon_height, target_icon_bits);
+  Heltec.display->drawString(12, 0, String(pTarget));
+  Heltec.display->drawXbm(0, 15, scope_icon_width, scope_icon_height, scope_icon_bits);
+  Heltec.display->drawString(12, 15, String(String(pBladder, 1)));
+  Heltec.display->display();
+}
