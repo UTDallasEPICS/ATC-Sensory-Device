@@ -1,12 +1,7 @@
-/* Authors:
-            Sasha Kaplan  Github: Sashakap, Alexander de Bont,
-            Harold F      Github:
-            Varsha Thomas Github: VT_c0des
-            Rohan Thomas  Github:
- * Engineering Projects in Community Service (EPICS), UTDallas
- * Project: Autism Treatment Center of Dallas - Sensory Device
-*/
-
+// Authors: Sasha Kaplan Github: Sashakap, Alexander de Bont,
+// Project: Autism Treatment Center of Dallas Sensory Device
+// Engineering Projects in Community Service
+// Arduino library - Version: Latest
 #include <Arduino.h>
 #include <string.h>
 #include <Wire.h>           // Wire Library - Version: Latest

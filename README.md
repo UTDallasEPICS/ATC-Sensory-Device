@@ -17,9 +17,8 @@ The following instructions assume the following are downloaded/added:
 
 1. Open the PlatformIO extension from the Activity Bar in VSCode
 2. Under quick access > micellaneous click on New Terminal
-3. Then, change your working directory with `cd ATCDeviceV3` to enter the correct folder
-4. To build the project enter `pio run` in the command line
-5. To build and run the project enter `pio run --target upload`in the command line
+3. To build the project enter `pio run` in the command line
+4. To build and run the project enter `pio run --target upload`in the command line
 
 ### Credits
 
