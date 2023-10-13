@@ -1,8 +1,6 @@
 /* Authors:
             Sasha Kaplan  Github: Sashakap, Alexander de Bont,
             Harold F      Github:
-            Varsha Thomas Github: VT_c0des
-            Rohan Thomas  Github:
  * Engineering Projects in Community Service (EPICS), UTDallas
  * Project: Autism Treatment Center of Dallas - Sensory Device
 */
