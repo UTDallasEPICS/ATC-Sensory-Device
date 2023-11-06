@@ -1,44 +1,21 @@
-// Authors: Sasha Kaplan Github: Sashakap, Alexander de Bont,
-// Project: Autism Treatment Center of Dallas Sensory Device
-// Engineering Projects in Community Service
-// Arduino library - Version: Latest
-#include <Arduino.h>
-#include <string.h>
-#include <Wire.h>           // Wire Library - Version: Latest
-#include <Adafruit_MPRLS.h> // Adafruit MPRLS Library - Version: Latest
-#include <heltec.h>         // Heltec ESP32 Dev-Boards - Version: Latest
-#include "images.h"
+/* Authors:
+            Sasha Kaplan        Github: Sashakap, Alexander de Bont,
+            Harold F
+            Varsha Thomas       Github: VT_c0des
+            Rohan Thomas        Github: tr0han
+ * Project: Autism Treatment Center of Dallas Sensory Device
+ * UTD Engineering Projects in Community Service (EPICS)
+ * Semester/Year Updated: Fall 2023
+ */
 
-// BLE Headers
-#include <BLEDevice.h>
-#include <BLEServer.h>
-#include <BLEUtils.h>
-#include <BLE2902.h>
+#include <constants.h>
 
-// Custom I2C Pins
-#define I2C_SCL 42
-#define I2C_SDA 41
 TwoWire I2CMPR = TwoWire(1);
-
-// MPRLS Setup
-#define RESET_PIN -1 // set to any GPIO pin # to hard-reset on begin()
-#define EOC_PIN -1   // set to any GPIO pin to read end-of-conversion by pin
 Adafruit_MPRLS mpr;
 
-// GPIO Pins
-#define motor 19 // Motor GPIO Pin
-#define valve 34 // Valve GPIO Pin
-
-// Define BLE Service
-#define SERVICE_UUID "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"           // UART service UUID
-#define CHARACTERISTIC_UUID_RX "6E400002-B5A3-F393-E0A9-E50E24DCCA9E" // For Receiving Values from Phone
-#define CHARACTERISTIC_UUID_TX "6E400003-B5A3-F393-E0A9-E50E24DCCA9E" // For Transmitting Values to Phone
-
-#define DEVICE_NAME "ATC_3"
-
-// Reading Messages from Mobile App
-typedef unsigned char uchar;
-float pressureTarget = -1;
+// BLE Fields
+BLEServer *pServer = NULL;
+BLECharacteristic *pTxCharacteristic;
 
 // Function Prototypes
 float getPressure();
@@ -50,17 +27,17 @@ void readyMessage();
 void drawMonitor(float, float);
 void drawString(String);
 
+// Reading Messages from Mobile App
+typedef unsigned char uChar;
+float pressureTarget = -1;
+
 // Pressure Regulation Data
-const int DELAY_TIME = 250; // Periodically check pressure
 double pressureAmbiant;
-bool motorAlreadyOn = false;
+bool inflateMotorAlreadyOn = false;
+//***other bool for d motor
 bool valveAlreadyOn = false;
 bool deviceConnected = false;
 bool oldDeviceConnected = false;
-
-// BLE Fields
-BLEServer *pServer = NULL;
-BLECharacteristic *pTxCharacteristic;
 
 // Class that checks for server callbacks
 class MyServerCallbacks : public BLEServerCallbacks
@@ -79,18 +56,21 @@ class MyServerCallbacks : public BLEServerCallbacks
   }
 };
 
+// After a notification is received that the characterstic value changed (i.e., data was sent from the phone)
 class MyCallbacks : public BLECharacteristicCallbacks
 {
-  // After a notification is received that the characterstic value changed (i.e., data was sent from the phone)
+  // recieve data from Android Device
   void onWrite(BLECharacteristic *pCharacteristic)
   {
+    Serial.println("Recieving from Device");
+
     std::string rxValue = pCharacteristic->getValue();
     Serial.print(F("rxValue -> "));
     Serial.println(rxValue.c_str());
 
     // Create Byte Array from String
     // A float is a 32-bit datatype (4 bytes)
-    uchar rxBytes[rxValue.length()];
+    uChar rxBytes[rxValue.length()];
     memcpy(rxBytes, rxValue.data(), rxValue.length());
 
     Serial.print("rxLength: " + String(rxValue.length())); //
@@ -99,14 +79,15 @@ class MyCallbacks : public BLECharacteristicCallbacks
     for (int i = 0; i < length; i++)
     { //
       Serial.print(rxBytes[i], HEX);
+      Serial.print("  ");
     } //
 
-    Serial.println("\n*********");
-    Serial.print("Received Value: ");
     // Convert byte array to floating point number
     // This copies the values of the bytes of rxBytes directly to the memory location pointed to by pressureTarget
     // memcpy(&pressureTarget, &rxBytes, sizeof(pressureTarget));
     pressureTarget = byteArrayToFloat(rxBytes[0], rxBytes[1], rxBytes[2], rxBytes[3]);
+    Serial.println("\n*********");
+    Serial.print("Received Value: ");
     Serial.print(String(pressureTarget));
     Serial.println("\n*********");
 
@@ -115,6 +96,8 @@ class MyCallbacks : public BLECharacteristicCallbacks
       standby();
     }
   }
+
+  // recieve data from iOS device
 };
 
 // Main method
@@ -129,7 +112,8 @@ void setup()
   bool status = mpr.begin(0x18, &I2CMPR);
 
   // GPIO Setup
-  pinMode(motor, OUTPUT);
+  pinMode(inflateMotor, OUTPUT);
+  pinMode(deflateMotor, OUTPUT);
   pinMode(valve, OUTPUT);
 
   // Check That MPRLS Sensor is Connected
@@ -174,26 +158,26 @@ void loop()
       String pressureMessage = "";
 
       // Over Target
-      if ((pressureBladder > pressureTarget) && !motorAlreadyOn)
+      if ((pressureBladder > pressureTarget) && !inflateMotorAlreadyOn)
       {
-        motorAlreadyOn = true;
+        inflateMotorAlreadyOn = true;
         valveAlreadyOn = false;
         pressureMessage = "PSI: " + String(pressureBladder);
         // Serial.println(pressureMessage + "Over Target");
         // Will continue a cycle of releasing air as long as the target pressure is lower than the pressure in the bladder
         // Activate the release valve
         digitalWrite(valve, HIGH);
-        digitalWrite(motor, LOW);
+        digitalWrite(inflateMotor, LOW);
       }
       // Under Target
       else if ((pressureBladder < pressureTarget) && !valveAlreadyOn)
       {
         valveAlreadyOn = true;
-        motorAlreadyOn = false;
+        inflateMotorAlreadyOn = false;
         pressureMessage = "PSI: " + String(pressureBladder);
         // Serial.println(pressureMessage + "Under Target");
         // Will continue a cycle of pumping air as long as the target pressure is higher than the pressure in the bladder
-        digitalWrite(motor, HIGH);
+        digitalWrite(inflateMotor, HIGH);
         digitalWrite(valve, LOW);
       }
       // On Target
@@ -236,18 +220,21 @@ float getPressure()
 
 void standby()
 {
-  digitalWrite(motor, LOW);
+  digitalWrite(inflateMotor, LOW);
+  //***digitalWrite(delfateMotor, LOW);
   digitalWrite(valve, LOW);
-  motorAlreadyOn = false;
+  inflateMotorAlreadyOn = false;
+  //***other bool
   valveAlreadyOn = false;
 }
 
-float byteArrayToFloat(uchar b0, uchar b1, uchar b2, uchar b3)
+float byteArrayToFloat(uChar b0, uChar b1, uChar b2, uChar b3)
 {
   // Intepret the 4 bytes as floating point in Big Endian
   float result;
-  uchar byte_array[] = {b3, b2, b1, b0};
-  std::copy(reinterpret_cast<const char *>(&byte_array[0]), reinterpret_cast<const char *>(&byte_array[4]), reinterpret_cast<char *>(&result));
+  uChar byte_array[] = {b3, b2, b1, b0};
+  std::copy(reinterpret_cast<const char *>(&byte_array[0]), reinterpret_cast<const char *>(&byte_array[3]), reinterpret_cast<char *>(&result));
+
   return result;
 }
 
