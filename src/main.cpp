@@ -8,36 +8,106 @@
  * Semester/Year Updated: Fall 2023
  */
 
-#include <constants.h>
+#include <constants_includes.h> // includes CONST, defines, headers
 
 TwoWire I2CMPR = TwoWire(1);
 Adafruit_MPRLS mpr;
 
-// BLE Fields
-BLEServer *pServer = NULL;
-BLECharacteristic *pTxCharacteristic;
-
-// Function Prototypes
-float getPressure();
-void standby();
-float byteArrayToFloat(byte, byte, byte, byte);
+// Function Declarations
+//  BLE
 void startBLESetup();
+
+// OLED Display
 void setupOLED();
 void readyMessage();
 void drawMonitor(float, float);
 void drawString(String);
 
-// Reading Messages from Mobile App
+// Operation Modes
+void motorON(int);
+void motorOFF(int);
+void valveON();
+void valveOFF();
+void standby();
+void freeRun();
+void cycleRun();
+bool inflateBladder();
+bool deflateBladder();
+void emergencySwitchTriggered();
+float readPressureSensor();
+
+// Auxilliary Methods
+float byteArrayToFloat(byte, byte, byte, byte);
+void printStructContents();
+
+// BLE Fields
+BLEServer *pServer = NULL;
+BLECharacteristic *pTxCharacteristic;
+
+// Reading Messages from Android App
 typedef unsigned char uChar;
 float pressureTarget = -1;
 
+// data for message from iOS App
+struct DataReceived
+{
+  uint8_t mobileIdentifier;
+  bool freeRun;
+  bool inflate;
+  bool deflate;
+  bool cycleRun;
+  bool start;
+  bool stop;
+  float targetPressure;
+  float holdTime;
+
+  // initialize constructor with defaults upon startup
+  DataReceived()
+  {
+    mobileIdentifier = NO_IDENTIFIER;
+    freeRun = false;
+    inflate = false;
+    deflate = false;
+    cycleRun = false;
+    start = false;
+    stop = false;
+    targetPressure = PRESSURE_MIN;
+    holdTime = 0.0;
+  } // end of default constructor
+
+  // initialize struct with data recieved from ble transmission
+  DataReceived(int mI, bool fR, bool inf,
+               bool def, bool cR, bool stt,
+               bool stp, float pVal, float hT)
+  {
+    mobileIdentifier = mI;
+    freeRun = fR;
+    inflate = inf;
+    deflate = def;
+    cycleRun = cR;
+    start = stt;
+    stop = stp;
+    targetPressure = pVal;
+    holdTime = (hT * 1000); // convert to milliseconds
+  }                         // end of constructor
+};
+
 // Pressure Regulation Data
-double pressureAmbiant;
-bool inflateMotorAlreadyOn = false;
-//***other bool for d motor
-bool valveAlreadyOn = false;
+struct DataReceived data;
+unsigned long startTime = 0.0;
+float currentBladderPressure = 0.0;
+bool eStopEnabled = false;
+bool inflateMotorIsOn = false;
+bool deflateMotorIsOn = false;
+bool valveIsOn = false;
 bool deviceConnected = false;
-bool oldDeviceConnected = false;
+bool currentDeviceConnected = false;
+bool inflateOpComplete = false;
+bool deflateOpComplete = false;
+bool cycleStartCondition = true;
+bool runStartCondition = true;
+char operationMode = STANDBY;
+String pressureMessage = "";
 
 // Class that checks for server callbacks
 class MyServerCallbacks : public BLEServerCallbacks
@@ -59,45 +129,62 @@ class MyServerCallbacks : public BLEServerCallbacks
 // After a notification is received that the characterstic value changed (i.e., data was sent from the phone)
 class MyCallbacks : public BLECharacteristicCallbacks
 {
-  // recieve data from Android Device
+  // handle a case where device is neither ios or android. throw an error?
   void onWrite(BLECharacteristic *pCharacteristic)
   {
-    Serial.println("Recieving from Device");
-
-    std::string rxValue = pCharacteristic->getValue();
-    Serial.print(F("rxValue -> "));
-    Serial.println(rxValue.c_str());
-
-    // Create Byte Array from String
-    // A float is a 32-bit datatype (4 bytes)
-    uChar rxBytes[rxValue.length()];
-    memcpy(rxBytes, rxValue.data(), rxValue.length());
-
-    Serial.print("rxLength: " + String(rxValue.length())); //
-    Serial.println();                                      //
-    int length = sizeof(rxBytes) / sizeof(rxBytes[0]);     //  Debugging
-    for (int i = 0; i < length; i++)
-    { //
-      Serial.print(rxBytes[i], HEX);
-      Serial.print("  ");
-    } //
-
-    // Convert byte array to floating point number
-    // This copies the values of the bytes of rxBytes directly to the memory location pointed to by pressureTarget
-    // memcpy(&pressureTarget, &rxBytes, sizeof(pressureTarget));
-    pressureTarget = byteArrayToFloat(rxBytes[0], rxBytes[1], rxBytes[2], rxBytes[3]);
-    Serial.println("\n*********");
-    Serial.print("Received Value: ");
-    Serial.print(String(pressureTarget));
-    Serial.println("\n*********");
-
-    if (pressureTarget < 0)
+    if (data.mobileIdentifier == NO_IDENTIFIER)
     {
-      standby();
+      Serial.println("DANGER: UNAUTHORIZED DEVICE IS ATTEMPTING TO SEND DATA");
+    }
+    else
+    {
+      Serial.println("Recieving from Device");
+      memcpy(&data, pCharacteristic, sizeof(pCharacteristic));
+      printStructContents();
+    }
+
+    // // recieve data from android device
+    // std::string rxValue = pCharacteristic->getValue();
+    // Serial.print(F("rxValue -> "));
+    // Serial.println(rxValue.c_str());
+
+    // // Create Byte Array from String
+    // // A float is a 32-bit datatype (4 bytes)
+    // uChar rxBytes[rxValue.length()];
+    // memcpy(rxBytes, rxValue.data(), rxValue.length());
+
+    // Serial.print("rxLength: " + String(rxValue.length())); //
+    // Serial.println();                                      //
+    // int length = sizeof(rxBytes) / sizeof(rxBytes[0]);     //  Debugging
+    // for (int i = 0; i < length; i++)
+    // { //
+    //   Serial.print(rxBytes[i], HEX);
+    //   Serial.print("  ");
+    // } //
+
+    // // Convert byte array to floating point number
+    // // This copies the values of the bytes of rxBytes directly to the memory location pointed to by pressureTarget
+    // // memcpy(&pressureTarget, &rxBytes, sizeof(pressureTarget));
+    // pressureTarget = byteArrayToFloat(rxBytes[0], rxBytes[1], rxBytes[2], rxBytes[3]);
+    // Serial.println("\n*********");
+    // Serial.print("Received Value: ");
+    // Serial.print(String(pressureTarget));
+    // Serial.println("\n*********");
+
+    // UPDATE OPERATION MODE
+    if (data.freeRun)
+    {
+      operationMode = FREERUN;
+    }
+    else if (data.cycleRun)
+    {
+      operationMode = CYCLERUN;
+    }
+    else
+    {
+      operationMode = STANDBY;
     }
   }
-
-  // recieve data from iOS device
 };
 
 // Main method
@@ -114,6 +201,7 @@ void setup()
   // GPIO Setup
   pinMode(inflateMotor, OUTPUT);
   pinMode(deflateMotor, OUTPUT);
+  pinMode(eStopSwitch, INPUT);
   pinMode(valve, OUTPUT);
 
   // Check That MPRLS Sensor is Connected
@@ -133,101 +221,272 @@ void setup()
 
   // Begin BluetoothLE GATT Server
   startBLESetup();
+
+  // create interrupt
+  attachInterrupt(eStopSwitch, emergencySwitchTriggered, FALLING);
 }
 
 void loop()
 {
-  // Idle
   if (deviceConnected)
   {
-    oldDeviceConnected = true;
+    currentDeviceConnected = true;
 
-    // Send Pressure Data to Phone
-    float pressureBladder = getPressure(); // Pressure in PSI
-    pTxCharacteristic->setValue(pressureBladder);
+    //-------------------------------------------------------------
+
+    // get pressure in PSI
+    currentBladderPressure = readPressureSensor();
+
+    // OLED Display
+    drawMonitor(currentBladderPressure, pressureTarget);
+
+    // Transmit pressure data to mobile device
+    pTxCharacteristic->setValue(currentBladderPressure);
     pTxCharacteristic->notify();
     delay(10); // bluetooth stack will go into congestion, if too many packets are sent
 
-    // OLED Display
-    drawMonitor(pressureBladder, pressureTarget);
-
-    //-------------------------------------------------------------
-
-    if (pressureTarget >= 0)
+    if (currentBladderPressure > PRESSURE_MAX)
     {
-      String pressureMessage = "";
-
-      // Over Target
-      if ((pressureBladder > pressureTarget) && !inflateMotorAlreadyOn)
-      {
-        inflateMotorAlreadyOn = true;
-        valveAlreadyOn = false;
-        pressureMessage = "PSI: " + String(pressureBladder);
-        // Serial.println(pressureMessage + "Over Target");
-        // Will continue a cycle of releasing air as long as the target pressure is lower than the pressure in the bladder
-        // Activate the release valve
-        digitalWrite(valve, HIGH);
-        digitalWrite(inflateMotor, LOW);
-      }
-      // Under Target
-      else if ((pressureBladder < pressureTarget) && !valveAlreadyOn)
-      {
-        valveAlreadyOn = true;
-        inflateMotorAlreadyOn = false;
-        pressureMessage = "PSI: " + String(pressureBladder);
-        // Serial.println(pressureMessage + "Under Target");
-        // Will continue a cycle of pumping air as long as the target pressure is higher than the pressure in the bladder
-        digitalWrite(inflateMotor, HIGH);
-        digitalWrite(valve, LOW);
-      }
-      // On Target
-      else
-      {
-        // Unlikely edge case that pressure is exactly where desired
-        // Serial.println("Target Aquired");
-      }
-
-      if (pressureBladder > 15.6)
-      {
-        Heltec.display->clear();
-        Heltec.display->drawXbm(0, 0, smile_width, smile_height, smile_bits);
-        Heltec.display->display();
-      }
+      Heltec.display->clear();
+      Heltec.display->drawXbm(0, 0, smile_width, smile_height, smile_bits);
+      Heltec.display->display();
     }
-    delay(DELAY_TIME);
+
     //-------------------------------------------------------------
+
+    // check mode of operation and call the appropriate function
+    if (eStopEnabled)
+    {
+      operationMode = STANDBY;
+    }
+    else
+    {
+      eStopEnabled = false;
+      switch (operationMode)
+      {
+      case FREERUN:
+        freeRun();
+        break;
+      case CYCLERUN:
+        cycleRun();
+        break;
+      case STANDBY:
+        standby();
+        break;
+      default:
+        standby();
+        break;
+      } // end of switch-case
+    }
   }
+  delay(DELAY_TIME);
 
   // disconnecting
-  if (!deviceConnected && oldDeviceConnected)
+  if (!deviceConnected && currentDeviceConnected)
   {
     Serial.println("Device Disconnected");
     delay(500);                  // give the bluetooth stack the chance to get things ready
     pServer->startAdvertising(); // restart advertising
     Serial.println("Advertising Restarted");
     deviceConnected = false;
-    oldDeviceConnected = false;
+    currentDeviceConnected = false;
     readyMessage();
+  }
+} // end of loop
+
+//===================Operation Mode Methods===============
+void motorON(int motorPin)
+{
+  digitalWrite(motorPin, HIGH);
+  // update both motor booleans.
+  inflateMotorIsOn = (motorPin == inflateMotor) ? true : false;
+  deflateMotorIsOn = (motorPin == deflateMotor) ? true : false;
+
+  // switch valve if deflate motor is activated, else keep it in the (default) inflate position
+  (motorPin == deflateMotor) ? valveON() : valveOFF();
+}
+
+void motorOFF(int motorPin)
+{
+  digitalWrite(motorPin, LOW);
+  // update motor booleans
+  inflateMotorIsOn = (motorPin == inflateMotor) ? false : true;
+  deflateMotorIsOn = (motorPin == deflateMotor) ? false : true;
+}
+
+// default valve position
+void valveOFF()
+{
+  digitalWrite(valve, LOW);
+  valveIsOn = false;
+}
+
+void valveON()
+{
+  digitalWrite(valve, HIGH);
+  valveIsOn = true;
+}
+
+// turns off both motors, sets valve to default position
+void standby()
+{
+  motorOFF(inflateMotor);
+  motorOFF(deflateMotor);
+  valveOFF();
+}
+
+bool inflateBladder()
+{
+  pressureMessage = "PSI: " + String(currentBladderPressure);
+  Serial.print("Current Bladder Pressure: ");
+  Serial.println(pressureMessage);
+  // inflate bladder until pressure hits target pressure
+  if (currentBladderPressure <= data.targetPressure)
+  {
+    valveOFF();
+    motorON(inflateMotor);
+  }
+  // stop inflating and hold at target pressure
+  else if (currentBladderPressure > data.targetPressure)
+  {
+    if (startTime == 0)
+    {
+      startTime = millis();
+    }
+    motorOFF(inflateMotor);
+  }
+  // check if holdTime has elapsed
+  if ((millis() - startTime) >= data.holdTime)
+  {
+    startTime = 0.0;
+    return true;
+  }
+
+  return false;
+}
+
+bool deflateBladder()
+{
+  pressureMessage = "PSI: " + String(currentBladderPressure);
+  Serial.print("Current Bladder Pressure: ");
+  Serial.println(pressureMessage);
+
+  // deflate bladder until minimum pressure
+  if (currentBladderPressure >= PRESSURE_MIN)
+  {
+    valveON();
+    motorON(deflateMotor);
+  }
+  // turn off deflate motor
+  else if (currentBladderPressure < PRESSURE_MIN)
+  {
+    valveOFF();
+    motorOFF(deflateMotor);
+    return true;
+  }
+  return false;
+}
+
+void freeRun()
+{
+  // deflate bladder upon startup
+  if (runStartCondition)
+  {
+    deflateOpComplete = deflateBladder();
+    if (deflateOpComplete)
+    {
+      runStartCondition = false;
+    }
+  }
+  else
+  {
+    if (data.inflate)
+    {
+      inflateOpComplete = inflateBladder();
+      if (inflateOpComplete)
+      {
+        // trigger deflate
+        data.deflate = true;
+        data.inflate = false;
+      }
+    }
+    else if (data.deflate)
+    {
+      // deflate bladder then go to standby
+      deflateOpComplete = deflateBladder();
+      if (deflateOpComplete)
+      {
+        data.deflate = false;
+        runStartCondition = true;
+        operationMode = STANDBY;
+      }
+    }
+    else
+    {
+      operationMode = STANDBY;
+    }
   }
 }
 
+void cycleRun()
+{
+  if (data.start)
+  {
+    // deflate bladder upon startup.
+    if (cycleStartCondition)
+    {
+      deflateOpComplete = deflateBladder();
+      if (deflateOpComplete)
+      {
+        cycleStartCondition = false;
+      }
+    }
+    else
+    {
+      // inflate if deflate completed
+      if (deflateOpComplete)
+      {
+        inflateOpComplete = inflateBladder();
+      }
+      // deflate if inflate completed
+      else if (inflateOpComplete)
+      {
+        deflateOpComplete = deflateBladder();
+      }
+    }
+  }
+  else if (data.stop)
+  {
+    cycleStartCondition = true;
+    // deflate device then go to standby
+    deflateOpComplete = deflateBladder();
+    if (deflateOpComplete)
+    {
+      operationMode = STANDBY;
+    }
+  }
+  else
+  {
+    operationMode = STANDBY;
+  }
+}
+
+void emergencySwitchTriggered()
+{
+  // deflate motor and enter standby
+  do
+  {
+    deflateOpComplete = deflateBladder();
+  } while (!deflateOpComplete);
+  eStopEnabled = true;
+}
+
+float readPressureSensor()
+{
+  return (mpr.readPressure() / 68.947572932);
+}
+
 //===================Auxilliary Methods===================
-// Fills up the bladder with 0 to PSI_LIMIT
-float getPressure()
-{
-  return mpr.readPressure() / 68.947572932;
-}
-
-void standby()
-{
-  digitalWrite(inflateMotor, LOW);
-  //***digitalWrite(delfateMotor, LOW);
-  digitalWrite(valve, LOW);
-  inflateMotorAlreadyOn = false;
-  //***other bool
-  valveAlreadyOn = false;
-}
-
 float byteArrayToFloat(uChar b0, uChar b1, uChar b2, uChar b3)
 {
   // Intepret the 4 bytes as floating point in Big Endian
@@ -238,7 +497,31 @@ float byteArrayToFloat(uChar b0, uChar b1, uChar b2, uChar b3)
   return result;
 }
 
-//===================Setup Methods===================
+void printStructContents()
+{
+  // print each value in the struct
+  Serial.print("Values from the struct:\n");
+  Serial.print("mobile identifier: ");
+  Serial.println(data.mobileIdentifier);
+  Serial.print("free run flag: ");
+  Serial.println(data.freeRun);
+  Serial.print("inflate flag: ");
+  Serial.println(data.inflate);
+  Serial.print("deflate flag: ");
+  Serial.println(data.deflate);
+  Serial.print("cycle run flag: ");
+  Serial.println(data.cycleRun);
+  Serial.print("start flag: ");
+  Serial.println(data.start);
+  Serial.print("stop flag: ");
+  Serial.println(data.stop);
+  Serial.print("target pressure (psi): ");
+  Serial.println(data.targetPressure);
+  Serial.print("inflate hold time (ms): ");
+  Serial.println(data.holdTime / 1000);
+}
+
+//===================BLE Methods===================
 void startBLESetup()
 {
   // Create the BLE Device
