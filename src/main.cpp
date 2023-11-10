@@ -33,7 +33,8 @@ void freeRun();
 void cycleRun();
 bool inflateBladder();
 bool deflateBladder();
-void emergencySwitchTriggered();
+void emergencySwitchEnabled();
+void emergencySwitchDisabled();
 float readPressureSensor();
 
 // Auxilliary Methods
@@ -201,8 +202,8 @@ void setup()
   // GPIO Setup
   pinMode(inflateMotor, OUTPUT);
   pinMode(deflateMotor, OUTPUT);
-  pinMode(eStopSwitch, INPUT);
   pinMode(valve, OUTPUT);
+  pinMode(eStopSwitch, INPUT);
 
   // Check That MPRLS Sensor is Connected
   if (!status)
@@ -222,8 +223,9 @@ void setup()
   // Begin BluetoothLE GATT Server
   startBLESetup();
 
-  // create interrupt
-  attachInterrupt(eStopSwitch, emergencySwitchTriggered, FALLING);
+  // Interrupt when status of emergency switch changes
+  attachInterrupt(digitalPinToInterrupt(eStopSwitch), emergencySwitchEnabled, LOW);
+  attachInterrupt(digitalPinToInterrupt(eStopSwitch), emergencySwitchDisabled, (CHANGE && HIGH));
 }
 
 void loop()
@@ -237,7 +239,7 @@ void loop()
     // get pressure in PSI
     currentBladderPressure = readPressureSensor();
 
-    // OLED Display
+    // to OLED Display
     drawMonitor(currentBladderPressure, pressureTarget);
 
     // Transmit pressure data to mobile device
@@ -261,7 +263,6 @@ void loop()
     }
     else
     {
-      eStopEnabled = false;
       switch (operationMode)
       {
       case FREERUN:
@@ -471,7 +472,7 @@ void cycleRun()
   }
 }
 
-void emergencySwitchTriggered()
+void emergencySwitchEnabled()
 {
   // deflate motor and enter standby
   do
@@ -479,6 +480,11 @@ void emergencySwitchTriggered()
     deflateOpComplete = deflateBladder();
   } while (!deflateOpComplete);
   eStopEnabled = true;
+}
+
+void emergencySwitchDisabled()
+{
+  eStopEnabled = false;
 }
 
 float readPressureSensor()
