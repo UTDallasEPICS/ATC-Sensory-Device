@@ -133,44 +133,9 @@ class MyCallbacks : public BLECharacteristicCallbacks
   // handle a case where device is neither ios or android. throw an error?
   void onWrite(BLECharacteristic *pCharacteristic)
   {
-    if (data.mobileIdentifier == NO_IDENTIFIER)
-    {
-      Serial.println("DANGER: UNAUTHORIZED DEVICE IS ATTEMPTING TO SEND DATA");
-    }
-    else
-    {
-      Serial.println("Recieving from Device");
-      memcpy(&data, pCharacteristic, sizeof(pCharacteristic));
-      printStructContents();
-    }
-
-    // // recieve data from android device
-    // std::string rxValue = pCharacteristic->getValue();
-    // Serial.print(F("rxValue -> "));
-    // Serial.println(rxValue.c_str());
-
-    // // Create Byte Array from String
-    // // A float is a 32-bit datatype (4 bytes)
-    // uChar rxBytes[rxValue.length()];
-    // memcpy(rxBytes, rxValue.data(), rxValue.length());
-
-    // Serial.print("rxLength: " + String(rxValue.length())); //
-    // Serial.println();                                      //
-    // int length = sizeof(rxBytes) / sizeof(rxBytes[0]);     //  Debugging
-    // for (int i = 0; i < length; i++)
-    // { //
-    //   Serial.print(rxBytes[i], HEX);
-    //   Serial.print("  ");
-    // } //
-
-    // // Convert byte array to floating point number
-    // // This copies the values of the bytes of rxBytes directly to the memory location pointed to by pressureTarget
-    // // memcpy(&pressureTarget, &rxBytes, sizeof(pressureTarget));
-    // pressureTarget = byteArrayToFloat(rxBytes[0], rxBytes[1], rxBytes[2], rxBytes[3]);
-    // Serial.println("\n*********");
-    // Serial.print("Received Value: ");
-    // Serial.print(String(pressureTarget));
-    // Serial.println("\n*********");
+    Serial.println("Recieving from Device...");
+    memcpy(&data, pCharacteristic, sizeof(pCharacteristic));
+    printStructContents();
 
     // UPDATE OPERATION MODE
     if (data.freeRun)
@@ -259,7 +224,7 @@ void loop()
     // check mode of operation and call the appropriate function
     if (eStopEnabled)
     {
-      operationMode = STANDBY;
+      standby();
     }
     else
     {
@@ -280,7 +245,7 @@ void loop()
       } // end of switch-case
     }
   }
-  delay(DELAY_TIME);
+  delay(SAMPLING_PERIOD);
 
   // disconnecting
   if (!deviceConnected && currentDeviceConnected)
@@ -331,6 +296,7 @@ void valveON()
 // turns off both motors, sets valve to default position
 void standby()
 {
+  Serial.println("In Standby");
   motorOFF(inflateMotor);
   motorOFF(deflateMotor);
   valveOFF();
@@ -344,6 +310,7 @@ bool inflateBladder()
   // inflate bladder until pressure hits target pressure
   if (currentBladderPressure <= data.targetPressure)
   {
+    Serial.println("Inflate");
     valveOFF();
     motorON(inflateMotor);
   }
@@ -352,6 +319,7 @@ bool inflateBladder()
   {
     if (startTime == 0)
     {
+      Serial.println("Hold");
       startTime = millis();
     }
     motorOFF(inflateMotor);
@@ -375,6 +343,7 @@ bool deflateBladder()
   // deflate bladder until minimum pressure
   if (currentBladderPressure >= PRESSURE_MIN)
   {
+    Serial.println("Deflate");
     valveON();
     motorON(deflateMotor);
   }

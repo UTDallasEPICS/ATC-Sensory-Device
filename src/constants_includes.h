@@ -21,9 +21,9 @@
 #define CHARACTERISTIC_UUID_RX "6E400002-B5A3-F393-E0A9-E50E24DCCA9E" // For Receiving Values from Phone
 #define CHARACTERISTIC_UUID_TX "6E400003-B5A3-F393-E0A9-E50E24DCCA9E" // For Transmitting Values to Phone
 
-const int DELAY_TIME = 250;    // Periodically check pressure
-const int PRESSURE_MAX = 15.7; //
-const int PRESSURE_MIN = 14.7; // atmospheric pressure is 14.7
+const int SAMPLING_PERIOD = 250; // Periodically check pressure
+const int PRESSURE_MAX = 15.7;   //
+const int PRESSURE_MIN = 14.7;   // atmospheric pressure is 14.7
 
 // Operation Modes
 const char STANDBY = 's';
