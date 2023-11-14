@@ -132,6 +132,9 @@ void setup()
   pinMode(motor, OUTPUT);
   pinMode(valve, OUTPUT);
 
+  digitalWrite(motor, LOW);
+  digitalWrite(valve, LOW);
+
   // Check That MPRLS Sensor is Connected
   if (!status)
   {

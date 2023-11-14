@@ -170,6 +170,11 @@ void setup()
   pinMode(valve, OUTPUT);
   pinMode(eStopSwitch, INPUT);
 
+  // Set all output pins to low
+  digitalWrite(inflateMotor, LOW);
+  digitalWrite(deflateMotor, LOW);
+  digitalWrite(valve, LOW);
+
   // Check That MPRLS Sensor is Connected
   if (!status)
   {
@@ -191,6 +196,8 @@ void setup()
   // Interrupt when status of emergency switch changes
   attachInterrupt(digitalPinToInterrupt(eStopSwitch), emergencySwitchEnabled, LOW);
   attachInterrupt(digitalPinToInterrupt(eStopSwitch), emergencySwitchDisabled, (CHANGE && HIGH));
+
+  digitalWrite()
 }
 
 void loop()
