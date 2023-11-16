@@ -23,7 +23,7 @@
 
 const int SAMPLING_PERIOD = 250; // Periodically check pressure
 const int PRESSURE_MAX = 15.7;   //
-const int PRESSURE_MIN = 14.5;   // atmospheric pressure is 14.7
+int pressure_min = 14.4;         // updates during setup to set atmospheric pressure
 
 // Operation Modes
 const char STANDBY = 's';

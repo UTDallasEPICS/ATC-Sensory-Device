@@ -38,49 +38,46 @@ void emergencySwitchDisabled();
 float readPressureSensor();
 
 // Auxilliary Methods
-float byteArrayToFloat(byte, byte, byte, byte);
 void printStructContents();
 
 // BLE Fields
 BLEServer *pServer = NULL;
 BLECharacteristic *pTxCharacteristic;
 
-// Reading Messages from Android App
-typedef unsigned char uChar;
-float pressureTarget = -1;
-
 // data for message from iOS App
 struct DataReceived
 {
   uint8_t mobileIdentifier;
-  uint8_t freeRun;
-  uint8_t inflate;
-  uint8_t deflate;
-  uint8_t cycleRun;
-  uint8_t start;
-  uint8_t stop;
+  bool freeRun;
+  bool inflate;
+  bool deflate;
+  bool cycleRun;
+  bool start;
+  bool stop;
   float targetPressure;
   float holdTime;
 
   // initialize constructor with defaults upon startup
   DataReceived()
   {
+    Serial.println("Default constructor");
     mobileIdentifier = NO_IDENTIFIER;
-    freeRun = 0;
-    inflate = 0;
-    deflate = 0;
-    cycleRun = 0;
-    start = 0;
-    stop = 0;
-    targetPressure = PRESSURE_MIN;
+    freeRun = false;
+    inflate = false;
+    deflate = false;
+    cycleRun = false;
+    start = false;
+    stop = false;
+    targetPressure = pressure_min;
     holdTime = 0.0;
   } // end of default constructor
 
   // initialize struct with data recieved from ble transmission
-  DataReceived(uint8_t mI, uint8_t fR, uint8_t inf,
-               uint8_t def, uint8_t cR, uint8_t stt,
-               uint8_t stp, float pVal, float hT)
+  DataReceived(uint8_t mI, bool fR, bool inf,
+               bool def, bool cR, bool stt,
+               bool stp, float pVal, float hT)
   {
+    Serial.println("Parametric constructor");
     mobileIdentifier = mI;
     freeRun = fR;
     inflate = inf;
@@ -133,7 +130,8 @@ class MyCallbacks : public BLECharacteristicCallbacks
   void onWrite(BLECharacteristic *pCharacteristic)
   {
     Serial.println("Recieving from Device...");
-    memcpy(&data, pCharacteristic, sizeof(pCharacteristic));
+    std::string rxValue = pCharacteristic->getValue();
+    memcpy(&data, rxValue.data(), rxValue.length());
     printStructContents();
 
     // UPDATE OPERATION MODE
@@ -195,6 +193,9 @@ void setup()
   // Interrupt when status of emergency switch changes
   attachInterrupt(digitalPinToInterrupt(eStopSwitch), emergencySwitchEnabled, LOW);
   attachInterrupt(digitalPinToInterrupt(eStopSwitch), emergencySwitchDisabled, (CHANGE && HIGH));
+
+  // determine atmospheric pressure and set it as the minimum value
+  pressure_min = readPressureSensor();
 }
 
 void loop()
@@ -209,7 +210,7 @@ void loop()
     currentBladderPressure = readPressureSensor();
 
     // to OLED Display
-    drawMonitor(currentBladderPressure, pressureTarget);
+    drawMonitor(currentBladderPressure, data.targetPressure);
 
     // Transmit pressure data to mobile device
     pTxCharacteristic->setValue(currentBladderPressure);
@@ -346,14 +347,14 @@ bool deflateBladder()
   Serial.println(pressureMessage);
 
   // deflate bladder until minimum pressure
-  if (currentBladderPressure >= PRESSURE_MIN)
+  if (currentBladderPressure >= pressure_min)
   {
     Serial.println("Deflate");
     valveON();
     motorON(deflateMotor);
   }
   // turn off deflate motor
-  else if (currentBladderPressure < PRESSURE_MIN)
+  else if (currentBladderPressure < pressure_min)
   {
     valveOFF();
     motorOFF(deflateMotor);
@@ -467,16 +468,6 @@ float readPressureSensor()
 }
 
 //===================Auxilliary Methods===================
-float byteArrayToFloat(uChar b0, uChar b1, uChar b2, uChar b3)
-{
-  // Intepret the 4 bytes as floating point in Big Endian
-  float result;
-  uChar byte_array[] = {b3, b2, b1, b0};
-  std::copy(reinterpret_cast<const char *>(&byte_array[0]), reinterpret_cast<const char *>(&byte_array[3]), reinterpret_cast<char *>(&result));
-
-  return result;
-}
-
 void printStructContents()
 {
   // print each value in the struct
