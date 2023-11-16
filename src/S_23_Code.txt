@@ -131,9 +131,11 @@ void setup()
   // GPIO Setup
   pinMode(motor, OUTPUT);
   pinMode(valve, OUTPUT);
+  pinMode(25, OUTPUT);
 
   digitalWrite(motor, LOW);
   digitalWrite(valve, LOW);
+  digitalWrite(25, HIGH);
 
   // Check That MPRLS Sensor is Connected
   if (!status)
@@ -152,6 +154,7 @@ void setup()
 
   // Begin BluetoothLE GATT Server
   startBLESetup();
+  Serial.println(getPressure());
 }
 
 void loop()
