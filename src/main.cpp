@@ -31,8 +31,8 @@ void valveOFF();
 void standby();
 void freeRun();
 void cycleRun();
-void eStopInterruptHandler();
-void resetEmergencyFlags();
+void eStopEnabledHandler();
+void eStopDisabledHandler();
 bool inflateBladder();
 bool deflateBladder();
 float readPressureSensor();
@@ -63,6 +63,7 @@ char operationMode = STANDBY;
 unsigned long holdStartTime = 0.0;
 float currentBladderPressure = 0.0;
 
+volatile bool eStopSwitchStatus = false;
 volatile bool eStopInterruptEnabled = false;
 bool eStopDeflateComplete = false;
 bool inflateMotorIsOn = false;
@@ -155,13 +156,10 @@ void setup()
     delay(1000);
   }
 
-  pressure_min = readPressureSensor() * PRESSURE_MARGIN; // determine ATM pressure
+  pressure_min = readPressureSensor(); // determine ATM pressure
   Serial.println("ATM Pressure: " + String(pressure_min) + " PSI");
   drawString("ATM Pressure: " + String(pressure_min) + " PSI");
   delay(1000);
-
-  // create and monitor interrupt
-  attachInterrupt(digitalPinToInterrupt(eStopSwitch), eStopInterruptHandler, FALLING);
 
   // Begin BluetoothLE GATT Server
   startBLESetup();
@@ -191,15 +189,23 @@ void loop()
     pTxCharacteristic->notify();
     delay(10); // bluetooth stack will go into congestion if too many packets are sent
 
-    // Begin operation
-    if (eStopInterruptEnabled && digitalRead(eStopSwitch))
+    //=========EMERGENCY STOP HANDLERS=========================================
+    eStopSwitchStatus = digitalRead(eStopSwitch);
+
+    if (eStopSwitchStatus && eStopInterruptEnabled)
     {
-      resetEmergencyFlags();
+      // if estop is released(disabled)
+      eStopDisabledHandler();
+    }
+    else // eStopSwitchStatus == false && eStopInterruptEnabled == false
+    {
+      // if estop is pressed(enabled)
+      eStopEnabledHandler();
     }
 
     if (eStopInterruptEnabled)
     {
-      eStopInterruptHandler();
+      eStopEnabledHandler();
     }
     else
     {
@@ -294,15 +300,16 @@ bool inflateBladder()
   {
     valveOFF();
     motorOFF(inflateMotor);
-    Serial.println("Start time: " + String(holdStartTime));
+    Serial.println("Start time: " + String(holdStartTime) + "ms");
     if (holdStartTime == 0.0)
     {
       Serial.println("Begin Hold");
       holdStartTime = millis();
     }
     // check if holdTime has elapsed
-    if ((millis() - holdStartTime) >= data.holdTime)
+    else if ((millis() - holdStartTime) >= data.holdTime)
     {
+      Serial.println((millis() - holdStartTime));
       Serial.println("Inflate Op Complete");
       holdStartTime = 0.0;
       return true;
@@ -419,7 +426,7 @@ void cycleRun()
   }
 }
 
-void eStopInterruptHandler()
+void eStopEnabledHandler()
 {
   eStopInterruptEnabled = true;
   // deflate bladder
@@ -434,10 +441,11 @@ void eStopInterruptHandler()
   }
 }
 
-void resetEmergencyFlags()
+void eStopDisabledHandler()
 {
   eStopInterruptEnabled = false;
   eStopDeflateComplete = false;
+  operationMode = STANDBY;
 }
 
 float readPressureSensor()

@@ -29,8 +29,7 @@ const byte ANDROID = 2;
 // Pressure Targets
 const int SAMPLING_PERIOD = 250; // for pressure sensor pressure
 const float PRESSURE_MAX = 15.7;
-float pressure_min = 14.4;         // update value upon device startup or reset
-const float PRESSURE_MARGIN = 1.1; // add 10% to atmospheric pressure to avoid bladder compression/shrinking
+float pressure_min = 14.4; // update value upon device startup or reset
 
 // Operation Modes
 const char STANDBY = 's';
