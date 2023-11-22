@@ -31,10 +31,10 @@ void valveOFF();
 void standby();
 void freeRun();
 void cycleRun();
+void eStopInterruptHandler();
+void resetEmergencyFlags();
 bool inflateBladder();
 bool deflateBladder();
-void emergencySwitchEnabled();
-void emergencySwitchDisabled();
 float readPressureSensor();
 
 // Auxilliary Methods
@@ -44,7 +44,6 @@ void printStructContents();
 BLEServer *pServer = NULL;
 BLECharacteristic *pTxCharacteristic;
 
-// data for message from iOS App
 struct DataReceived
 {
   uint8_t mobileIdentifier;
@@ -56,45 +55,16 @@ struct DataReceived
   bool stop;
   float targetPressure;
   float holdTime;
-
-  // initialize constructor with defaults upon startup
-  DataReceived()
-  {
-    Serial.println("Default constructor");
-    mobileIdentifier = NO_IDENTIFIER;
-    freeRun = false;
-    inflate = false;
-    deflate = false;
-    cycleRun = false;
-    start = false;
-    stop = false;
-    targetPressure = pressure_min;
-    holdTime = 0.0;
-  } // end of default constructor
-
-  // initialize struct with data recieved from ble transmission
-  DataReceived(uint8_t mI, bool fR, bool inf,
-               bool def, bool cR, bool stt,
-               bool stp, float pVal, float hT)
-  {
-    Serial.println("Parametric constructor");
-    mobileIdentifier = mI;
-    freeRun = fR;
-    inflate = inf;
-    deflate = def;
-    cycleRun = cR;
-    start = stt;
-    stop = stp;
-    targetPressure = pVal;
-    holdTime = (hT * 1000); // convert to milliseconds
-  }                         // end of constructor
 };
 
 // Pressure Regulation Data
 struct DataReceived data;
-unsigned long startTime = 0.0;
+char operationMode = STANDBY;
+unsigned long holdStartTime = 0.0;
 float currentBladderPressure = 0.0;
-bool eStopEnabled = false;
+
+volatile bool eStopInterruptEnabled = false;
+bool eStopDeflateComplete = false;
 bool inflateMotorIsOn = false;
 bool deflateMotorIsOn = false;
 bool valveIsOn = false;
@@ -103,9 +73,7 @@ bool currentDeviceConnected = false;
 bool inflateOpComplete = false;
 bool deflateOpComplete = false;
 bool cycleStartCondition = true;
-bool runStartCondition = true;
-char operationMode = STANDBY;
-String pressureMessage = "";
+bool freerunStartCondition = true;
 
 // Class that checks for server callbacks
 class MyServerCallbacks : public BLEServerCallbacks
@@ -132,6 +100,7 @@ class MyCallbacks : public BLECharacteristicCallbacks
     Serial.println("Recieving from Device...");
     std::string rxValue = pCharacteristic->getValue();
     memcpy(&data, rxValue.data(), rxValue.length());
+    data.holdTime = data.holdTime * 1000; // convert hold time to ms
     printStructContents();
 
     // UPDATE OPERATION MODE
@@ -167,7 +136,6 @@ void setup()
   pinMode(valve, OUTPUT);
   pinMode(eStopSwitch, INPUT);
 
-  // Set all output pins to low
   digitalWrite(inflateMotor, LOW);
   digitalWrite(deflateMotor, LOW);
   digitalWrite(valve, LOW);
@@ -187,15 +155,16 @@ void setup()
     delay(1000);
   }
 
+  pressure_min = readPressureSensor() * PRESSURE_MARGIN; // determine ATM pressure
+  Serial.println("ATM Pressure: " + String(pressure_min) + " PSI");
+  drawString("ATM Pressure: " + String(pressure_min) + " PSI");
+  delay(1000);
+
+  // create and monitor interrupt
+  attachInterrupt(digitalPinToInterrupt(eStopSwitch), eStopInterruptHandler, FALLING);
+
   // Begin BluetoothLE GATT Server
   startBLESetup();
-
-  // Interrupt when status of emergency switch changes
-  attachInterrupt(digitalPinToInterrupt(eStopSwitch), emergencySwitchEnabled, LOW);
-  attachInterrupt(digitalPinToInterrupt(eStopSwitch), emergencySwitchDisabled, (CHANGE && HIGH));
-
-  // determine atmospheric pressure and set it as the minimum value
-  pressure_min = readPressureSensor();
 }
 
 void loop()
@@ -204,19 +173,9 @@ void loop()
   {
     currentDeviceConnected = true;
 
-    //-------------------------------------------------------------
-
-    // get pressure in PSI
     currentBladderPressure = readPressureSensor();
 
-    // to OLED Display
-    drawMonitor(currentBladderPressure, data.targetPressure);
-
-    // Transmit pressure data to mobile device
-    pTxCharacteristic->setValue(currentBladderPressure);
-    pTxCharacteristic->notify();
-    delay(10); // bluetooth stack will go into congestion, if too many packets are sent
-
+    // display easter egg
     if (currentBladderPressure > PRESSURE_MAX)
     {
       Heltec.display->clear();
@@ -224,13 +183,23 @@ void loop()
       Heltec.display->display();
     }
 
-    //-------------------------------------------------------------
+    // update OLED display
+    drawMonitor(currentBladderPressure, data.targetPressure);
 
-    // check mode of operation and call the appropriate function
-    if (eStopEnabled)
+    // transmit data to mobile device
+    pTxCharacteristic->setValue(currentBladderPressure);
+    pTxCharacteristic->notify();
+    delay(10); // bluetooth stack will go into congestion if too many packets are sent
+
+    // Begin operation
+    if (eStopInterruptEnabled && digitalRead(eStopSwitch))
     {
-      Serial.println("E-Stop Enabled");
-      standby();
+      resetEmergencyFlags();
+    }
+
+    if (eStopInterruptEnabled)
+    {
+      eStopInterruptHandler();
     }
     else
     {
@@ -248,12 +217,12 @@ void loop()
       default:
         standby();
         break;
-      } // end of switch-case
+      }
     }
+    delay(SAMPLING_PERIOD); // sample pressure sensor if device is connected
   }
-  delay(SAMPLING_PERIOD);
 
-  // disconnecting
+  // Device Disconnected Actions
   if (!deviceConnected && currentDeviceConnected)
   {
     Serial.println("Device Disconnected");
@@ -264,7 +233,7 @@ void loop()
     currentDeviceConnected = false;
     readyMessage();
   }
-} // end of loop
+}
 
 //===================Operation Mode Methods===============
 void motorON(int motorPin)
@@ -302,7 +271,7 @@ void valveON()
 // turns off both motors, sets valve to default position
 void standby()
 {
-  Serial.println("In Standby");
+  Serial.println("Standby");
   motorOFF(inflateMotor);
   motorOFF(deflateMotor);
   valveOFF();
@@ -310,9 +279,9 @@ void standby()
 
 bool inflateBladder()
 {
-  pressureMessage = "PSI: " + String(currentBladderPressure);
-  Serial.print("Current Bladder Pressure: ");
-  Serial.println(pressureMessage);
+  Serial.println("Target: " + String(data.targetPressure) + " PSI");
+  Serial.println("Current: " + String(currentBladderPressure) + " PSI");
+
   // inflate bladder until pressure hits target pressure
   if (currentBladderPressure <= data.targetPressure)
   {
@@ -321,40 +290,42 @@ bool inflateBladder()
     motorON(inflateMotor);
   }
   // stop inflating and hold at target pressure
-  else if (currentBladderPressure > data.targetPressure)
+  else
   {
-    if (startTime == 0)
-    {
-      Serial.println("Hold");
-      startTime = millis();
-    }
+    valveOFF();
     motorOFF(inflateMotor);
+    Serial.println("Start time: " + String(holdStartTime));
+    if (holdStartTime == 0.0)
+    {
+      Serial.println("Begin Hold");
+      holdStartTime = millis();
+    }
+    // check if holdTime has elapsed
+    if ((millis() - holdStartTime) >= data.holdTime)
+    {
+      Serial.println("Inflate Op Complete");
+      holdStartTime = 0.0;
+      return true;
+    }
   }
-  // check if holdTime has elapsed
-  if ((millis() - startTime) >= data.holdTime)
-  {
-    startTime = 0.0;
-    return true;
-  }
-
   return false;
 }
 
 bool deflateBladder()
 {
-  pressureMessage = "PSI: " + String(currentBladderPressure);
-  Serial.print("Current Bladder Pressure: ");
-  Serial.println(pressureMessage);
+  Serial.println("Target: " + String(data.targetPressure) + " PSI");
+  Serial.println("Current: " + String(currentBladderPressure) + " PSI");
 
   // deflate bladder until minimum pressure
   if (currentBladderPressure >= pressure_min)
   {
     Serial.println("Deflate");
+    motorOFF(inflateMotor);
     valveON();
     motorON(deflateMotor);
   }
   // turn off deflate motor
-  else if (currentBladderPressure < pressure_min)
+  else
   {
     valveOFF();
     motorOFF(deflateMotor);
@@ -366,12 +337,13 @@ bool deflateBladder()
 void freeRun()
 {
   // deflate bladder upon startup
-  if (runStartCondition)
+  if (freerunStartCondition)
   {
+    Serial.println("Completing startup steps: deflate");
     deflateOpComplete = deflateBladder();
     if (deflateOpComplete)
     {
-      runStartCondition = false;
+      freerunStartCondition = false;
     }
   }
   else
@@ -393,7 +365,7 @@ void freeRun()
       if (deflateOpComplete)
       {
         data.deflate = false;
-        runStartCondition = true;
+        freerunStartCondition = true;
         operationMode = STANDBY;
       }
     }
@@ -433,13 +405,13 @@ void cycleRun()
   }
   else if (data.stop)
   {
-    cycleStartCondition = true;
     // deflate device then go to standby
     deflateOpComplete = deflateBladder();
     if (deflateOpComplete)
     {
       operationMode = STANDBY;
     }
+    cycleStartCondition = true;
   }
   else
   {
@@ -447,19 +419,25 @@ void cycleRun()
   }
 }
 
-void emergencySwitchEnabled()
+void eStopInterruptHandler()
 {
-  // deflate motor and enter standby
-  do
+  eStopInterruptEnabled = true;
+  // deflate bladder
+  if (!eStopDeflateComplete)
   {
-    deflateOpComplete = deflateBladder();
-  } while (!deflateOpComplete);
-  eStopEnabled = true;
+    eStopDeflateComplete = deflateBladder();
+  }
+  // remain in standby once emergency deflate is complete
+  else
+  {
+    standby();
+  }
 }
 
-void emergencySwitchDisabled()
+void resetEmergencyFlags()
 {
-  eStopEnabled = false;
+  eStopInterruptEnabled = false;
+  eStopDeflateComplete = false;
 }
 
 float readPressureSensor()
