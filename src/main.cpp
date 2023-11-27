@@ -2,13 +2,12 @@
             Sasha Kaplan        Github: Sashakap, Alexander de Bont,
             Harold F
             Varsha Thomas       Github: VT_c0des
-            Rohan Thomas        Github: tr0han
  * Project: Autism Treatment Center of Dallas Sensory Device
  * UTD Engineering Projects in Community Service (EPICS)
  * Semester/Year Updated: Fall 2023
  */
 
-#include <constants_includes.h> // includes CONST, defines, headers
+#include <constants_headers.h> // include statements, consts, defines
 
 TwoWire I2CMPR = TwoWire(1);
 Adafruit_MPRLS mpr;
@@ -167,11 +166,14 @@ void setup()
 
 void loop()
 {
+  // Device Connected Actions
   if (deviceConnected)
   {
     currentDeviceConnected = true;
 
     currentBladderPressure = readPressureSensor();
+
+    //=========BLE/OLED COMMUNICATION==================================================
 
     // display easter egg
     if (currentBladderPressure > PRESSURE_MAX)
@@ -189,22 +191,24 @@ void loop()
     pTxCharacteristic->notify();
     delay(10); // bluetooth stack will go into congestion if too many packets are sent
 
-    //=========EMERGENCY STOP HANDLERS=========================================
+    //=========EMERGENCY STOP SOFTWARE HANDLER=========================================
     eStopSwitchStatus = digitalRead(eStopSwitch);
 
     if (eStopSwitchStatus && eStopInterruptEnabled)
     {
-      // if estop is released(disabled)
+      // if estop is released(disabled) and software interrupt enabled
       eStopDisabledHandler();
     }
-    else // eStopSwitchStatus == false && eStopInterruptEnabled == false
+    else if (!eStopSwitchStatus && !eStopInterruptEnabled)
     {
-      // if estop is pressed(enabled)
+      // if estop is pressed(enabled) and software interrupt disabled
       eStopEnabledHandler();
     }
 
+    //=========NORMAL OPERATION========================================================
     if (eStopInterruptEnabled)
     {
+      // software interrupt enabled
       eStopEnabledHandler();
     }
     else
@@ -218,6 +222,7 @@ void loop()
         cycleRun();
         break;
       case STANDBY:
+        Serial.println("OP Standby");
         standby();
         break;
       default:
@@ -357,6 +362,7 @@ void freeRun()
   {
     if (data.inflate)
     {
+      Serial.println("Inflate FR");
       inflateOpComplete = inflateBladder();
       if (inflateOpComplete)
       {
@@ -368,6 +374,7 @@ void freeRun()
     else if (data.deflate)
     {
       // deflate bladder then go to standby
+      Serial.println("Deflate FR");
       deflateOpComplete = deflateBladder();
       if (deflateOpComplete)
       {
@@ -390,6 +397,7 @@ void cycleRun()
     // deflate bladder upon startup.
     if (cycleStartCondition)
     {
+      Serial.println("Completing startup steps: deflate");
       deflateOpComplete = deflateBladder();
       if (deflateOpComplete)
       {
@@ -401,11 +409,13 @@ void cycleRun()
       // inflate if deflate completed
       if (deflateOpComplete)
       {
+        Serial.println("Inflate CR");
         inflateOpComplete = inflateBladder();
       }
       // deflate if inflate completed
       else if (inflateOpComplete)
       {
+        Serial.println("Deflate CR");
         deflateOpComplete = deflateBladder();
       }
     }
@@ -416,9 +426,11 @@ void cycleRun()
     deflateOpComplete = deflateBladder();
     if (deflateOpComplete)
     {
+      data.start = false;
+      data.stop = false;
+      cycleStartCondition = true;
       operationMode = STANDBY;
     }
-    cycleStartCondition = true;
   }
   else
   {
@@ -457,25 +469,16 @@ float readPressureSensor()
 void printStructContents()
 {
   // print each value in the struct
-  Serial.print("Values from the struct:\n");
-  Serial.print("mobile identifier: ");
-  Serial.println(data.mobileIdentifier);
-  Serial.print("free run flag: ");
-  Serial.println(data.freeRun);
-  Serial.print("inflate flag: ");
-  Serial.println(data.inflate);
-  Serial.print("deflate flag: ");
-  Serial.println(data.deflate);
-  Serial.print("cycle run flag: ");
-  Serial.println(data.cycleRun);
-  Serial.print("start flag: ");
-  Serial.println(data.start);
-  Serial.print("stop flag: ");
-  Serial.println(data.stop);
-  Serial.print("target pressure (psi): ");
-  Serial.println(data.targetPressure);
-  Serial.print("inflate hold time (ms): ");
-  Serial.println(data.holdTime / 1000);
+  Serial.println("Values from the struct:");
+  Serial.println("mobile identifier: " + String(data.mobileIdentifier));
+  Serial.println("free run: " + String(data.freeRun));
+  Serial.println("inflate: " + String(data.inflate));
+  Serial.println("deflate: " + String(data.deflate));
+  Serial.println("cycle run: " + String(data.cycleRun));
+  Serial.println("start: " + String(data.start));
+  Serial.println("stop: " + String(data.stop));
+  Serial.println("target pressure (psi): " + String(data.targetPressure));
+  Serial.println("hold time(s): " + String((data.holdTime / 1000)));
 }
 
 //===================BLE Methods===================
@@ -492,7 +495,6 @@ void startBLESetup()
   BLEService *pService = pServer->createService(SERVICE_UUID);
 
   // Create a BLE Characteristics
-
   // TX Characteristic (Send Data to Mobile Device)
   pTxCharacteristic = pService->createCharacteristic(CHARACTERISTIC_UUID_TX, BLECharacteristic::PROPERTY_NOTIFY);
   pTxCharacteristic->addDescriptor(new BLE2902());
