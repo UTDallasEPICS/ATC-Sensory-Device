@@ -45,15 +45,15 @@ BLECharacteristic *pTxCharacteristic;
 
 struct DataReceived
 {
-  uint8_t mobileIdentifier;
-  bool freeRun;
-  bool inflate;
-  bool deflate;
-  bool cycleRun;
-  bool start;
-  bool stop;
-  float targetPressure;
-  float holdTime;
+  uint8_t mobileIdentifier = NO_IDENTIFIER;
+  bool freeRun = false;
+  bool inflate = false;
+  bool deflate = false;
+  bool cycleRun = false;
+  bool start = false;
+  bool stop = false;
+  float targetPressure = 0.0;
+  float holdTime = 0.0;
 };
 
 // Pressure Regulation Data
@@ -70,6 +70,7 @@ bool deflateMotorIsOn = false;
 bool valveIsOn = false;
 bool deviceConnected = false;
 bool currentDeviceConnected = false;
+bool startHold = true;
 bool inflateOpComplete = false;
 bool deflateOpComplete = false;
 bool cycleStartCondition = true;
@@ -100,6 +101,7 @@ class MyCallbacks : public BLECharacteristicCallbacks
     Serial.println("Recieving from Device...");
     std::string rxValue = pCharacteristic->getValue();
     memcpy(&data, rxValue.data(), rxValue.length());
+    data.targetPressure = data.targetPressure + PRESSURE_MARGIN;
     data.holdTime = data.holdTime * 1000; // convert hold time to ms
     printStructContents();
 
@@ -122,14 +124,6 @@ class MyCallbacks : public BLECharacteristicCallbacks
 // Main method
 void setup()
 {
-  // Serial Setup & OLED Setup
-  Serial.begin(115200);
-  setupOLED();
-
-  // Custom I2C Pins & MPRLS Setup
-  I2CMPR.begin(I2C_SDA, I2C_SCL, 400000);
-  bool status = mpr.begin(0x18, &I2CMPR);
-
   // GPIO Setup
   pinMode(inflateMotor, OUTPUT);
   pinMode(deflateMotor, OUTPUT);
@@ -139,6 +133,14 @@ void setup()
   digitalWrite(inflateMotor, LOW);
   digitalWrite(deflateMotor, LOW);
   digitalWrite(valve, LOW);
+
+  // Serial Setup & OLED Setup
+  Serial.begin(115200);
+  setupOLED();
+
+  // Custom I2C Pins & MPRLS Setup
+  I2CMPR.begin(I2C_SDA, I2C_SCL, 400000);
+  bool status = mpr.begin(0x18, &I2CMPR);
 
   // Check That MPRLS Sensor is Connected
   if (!status)
@@ -205,6 +207,15 @@ void loop()
       eStopEnabledHandler();
     }
 
+    //=========ADJUST MARGIN========================================================
+    if (Serial.available() > 0)
+    {
+      PRESSURE_MARGIN = Serial.parseFloat();
+      Serial.println("Pressure Margin: " + String(PRESSURE_MARGIN));
+      data.targetPressure = data.targetPressure + PRESSURE_MARGIN;
+      Serial.println("Target Pressure: " + String(data.targetPressure));
+    }
+
     //=========NORMAL OPERATION========================================================
     if (eStopInterruptEnabled)
     {
@@ -213,6 +224,7 @@ void loop()
     }
     else
     {
+      // Serial.println("Evaluating Operation Mode");
       switch (operationMode)
       {
       case FREERUN:
@@ -222,7 +234,6 @@ void loop()
         cycleRun();
         break;
       case STANDBY:
-        Serial.println("OP Standby");
         standby();
         break;
       default:
@@ -282,7 +293,7 @@ void valveON()
 // turns off both motors, sets valve to default position
 void standby()
 {
-  Serial.println("Standby");
+  // Serial.println("Standby (psi): " + String(readPressureSensor()));
   motorOFF(inflateMotor);
   motorOFF(deflateMotor);
   valveOFF();
@@ -290,8 +301,7 @@ void standby()
 
 bool inflateBladder()
 {
-  Serial.println("Target: " + String(data.targetPressure) + " PSI");
-  Serial.println("Current: " + String(currentBladderPressure) + " PSI");
+  Serial.println("Target: " + String(data.targetPressure) + " PSI\tCurrent: " + String(currentBladderPressure) + " PSI");
 
   // inflate bladder until pressure hits target pressure
   if (currentBladderPressure <= data.targetPressure)
@@ -305,19 +315,29 @@ bool inflateBladder()
   {
     valveOFF();
     motorOFF(inflateMotor);
-    Serial.println("Start time: " + String(holdStartTime) + "ms");
-    if (holdStartTime == 0.0)
+    if (startHold)
     {
       Serial.println("Begin Hold");
       holdStartTime = millis();
+      startHold = false;
+      Serial.println("Start time(ms): " + String(holdStartTime) + "ms");
     }
-    // check if holdTime has elapsed
-    else if ((millis() - holdStartTime) >= data.holdTime)
+    else
     {
-      Serial.println((millis() - holdStartTime));
-      Serial.println("Inflate Op Complete");
-      holdStartTime = 0.0;
-      return true;
+      // check if holdTime has elapsed
+      if ((millis() - holdStartTime) >= data.holdTime)
+      {
+        Serial.println("Finish time(ms): " + String(millis() - holdStartTime));
+        holdStartTime = 0.0;
+        startHold = true;
+        Serial.println("Inflate Op Complete. Hold Time(s): " + String(holdStartTime));
+        return true;
+      }
+      else
+      {
+        Serial.println("Still in hold");
+        startHold = false;
+      }
     }
   }
   return false;
@@ -325,8 +345,7 @@ bool inflateBladder()
 
 bool deflateBladder()
 {
-  Serial.println("Target: " + String(data.targetPressure) + " PSI");
-  Serial.println("Current: " + String(currentBladderPressure) + " PSI");
+  Serial.println("Target: " + String(data.targetPressure) + " PSI\tCurrent: " + String(currentBladderPressure) + " PSI");
 
   // deflate bladder until minimum pressure
   if (currentBladderPressure >= pressure_min)
@@ -351,7 +370,7 @@ void freeRun()
   // deflate bladder upon startup
   if (freerunStartCondition)
   {
-    Serial.println("Completing startup steps: deflate");
+    Serial.println("Deflate Start Condition");
     deflateOpComplete = deflateBladder();
     if (deflateOpComplete)
     {
@@ -362,7 +381,7 @@ void freeRun()
   {
     if (data.inflate)
     {
-      Serial.println("Inflate FR");
+      Serial.println("Mode: FR, Inf");
       inflateOpComplete = inflateBladder();
       if (inflateOpComplete)
       {
@@ -374,7 +393,7 @@ void freeRun()
     else if (data.deflate)
     {
       // deflate bladder then go to standby
-      Serial.println("Deflate FR");
+      Serial.println("Mode: FR, Def");
       deflateOpComplete = deflateBladder();
       if (deflateOpComplete)
       {
@@ -397,7 +416,7 @@ void cycleRun()
     // deflate bladder upon startup.
     if (cycleStartCondition)
     {
-      Serial.println("Completing startup steps: deflate");
+      Serial.println("Deflate Start Condition");
       deflateOpComplete = deflateBladder();
       if (deflateOpComplete)
       {
@@ -409,13 +428,13 @@ void cycleRun()
       // inflate if deflate completed
       if (deflateOpComplete)
       {
-        Serial.println("Inflate CR");
+        Serial.println("Mode: CR, Inf");
         inflateOpComplete = inflateBladder();
       }
       // deflate if inflate completed
       else if (inflateOpComplete)
       {
-        Serial.println("Deflate CR");
+        Serial.println("Mode: CR, Def");
         deflateOpComplete = deflateBladder();
       }
     }
@@ -440,6 +459,7 @@ void cycleRun()
 
 void eStopEnabledHandler()
 {
+  Serial.println("Power Cut/EStop Enabled");
   eStopInterruptEnabled = true;
   // deflate bladder
   if (!eStopDeflateComplete)
@@ -478,7 +498,7 @@ void printStructContents()
   Serial.println("start: " + String(data.start));
   Serial.println("stop: " + String(data.stop));
   Serial.println("target pressure (psi): " + String(data.targetPressure));
-  Serial.println("hold time(s): " + String((data.holdTime / 1000)));
+  Serial.println("hold time(s): " + String(data.holdTime));
 }
 
 //===================BLE Methods===================
