@@ -28,9 +28,10 @@ const byte ANDROID = 2;
 
 // Pressure Targets
 const int SAMPLING_PERIOD = 250; // for pressure sensor pressure
-const float PRESSURE_MAX = 15.7;
-float pressure_min = 14.4; // update value upon device startup or reset
-float PRESSURE_MARGIN = 0.0;
+const float PRESSURE_MAX = 16;
+const float INF_MARGIN = 0.1;
+const float DEF_MARGIN = 0.5;
+float pressure_min = 0.0; // update value upon device startup or reset
 
 // Operation Modes
 const char STANDBY = 's';
