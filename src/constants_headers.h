@@ -11,8 +11,8 @@
 #define EOC_PIN -1   // set to any GPIO pin to read end-of-conversion by pin
 
 // GPIO Pins
-const int inflateMotor = 19; // inflate Motor GPIO Pin
-const int deflateMotor = 20; // deflate Motor GPIO Pin
+const int inflateMotor = 20; // inflate Motor GPIO Pin
+const int deflateMotor = 19; // deflate Motor GPIO Pin
 const int valve = 34;        // Valve GPIO Pin
 const int eStopSwitch = 1;   // E-Stop GPIO Pin
 

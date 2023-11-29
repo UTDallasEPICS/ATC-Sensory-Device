@@ -450,7 +450,7 @@ void eStopEnabledHandler()
   // deflate bladder
   if (!eStopDeflateComplete)
   {
-    Serial.println("EStop - Deflateing");
+    Serial.println("EStop - Deflating");
     eStopDeflateComplete = deflateBladder();
   }
   // remain in standby once emergency deflate is complete
