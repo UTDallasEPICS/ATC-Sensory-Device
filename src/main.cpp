@@ -3,6 +3,7 @@
             Harold F
             Varsha Thomas       Github: VT_c0des
             Mandy Hardono       Github: hardonom
+            Rohan Thomas        Github: tr0han
  * Project: Autism Treatment Center of Dallas Sensory Device
  * UTD Engineering Projects in Community Service (EPICS)
  * Semester/Year Updated: Fall 2023
