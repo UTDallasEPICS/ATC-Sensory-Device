@@ -6,7 +6,7 @@ The following instructions assume the following are downloaded/added:
 
 1. Visual Studio Code IDE
 2. VSCode PlatformIO extension
-3. VSCode GitHub extension
+3. VSCode GitHub Codespaces extension
 
 ## Cloning a Project
 
