@@ -25,7 +25,7 @@ void drawMonitor(float, float, float);
 void drawString(String);
 
 // Operation Modes
-void motorON(int);
+void motorON(int, int); //pwm
 void motorOFF(int);
 void valveON();
 void valveOFF();
@@ -45,6 +45,7 @@ void printStructContents();
 BLEServer *pServer = NULL;
 BLECharacteristic *pTxCharacteristic;
 
+//defines package of data received from apps
 struct DataReceived
 {
   uint8_t mobileIdentifier = NO_IDENTIFIER;
@@ -57,6 +58,7 @@ struct DataReceived
   float inflateTargetPressure = 0.0;
   float holdTime = 0.0;
   float deflateTargetPressure = 0.0;
+  uint8_t dutyCycle = 0; //pwm
 };
 
 // Pressure Regulation Data
@@ -129,6 +131,7 @@ class MyCallbacks : public BLECharacteristicCallbacks
 void setup()
 {
   // GPIO Setup
+  /*
   pinMode(inflateMotor, OUTPUT);
   pinMode(deflateMotor, OUTPUT);
   pinMode(valve, OUTPUT);
@@ -136,6 +139,27 @@ void setup()
 
   digitalWrite(inflateMotor, LOW);
   digitalWrite(deflateMotor, LOW);
+  digitalWrite(valve, LOW);
+  */
+  //pwm
+  pinMode(inflateMotorAin1, OUTPUT);
+  pinMode(inflateMotorAin2, OUTPUT);
+  pinMode(deflateMotorBin1, OUTPUT);
+  pinMode(deflateMotorBin2, OUTPUT);
+  pinMode(valve, OUTPUT);
+  pinMode(eStopSwitch, INPUT);
+
+  //set up pins to generate pwms
+  ledcSetup(pwmInflate, freq, resolution);
+  ledcAttachPin(inflateMotorAin1, pwmInflate); 
+  ledcSetup(pwmDeflate, freq, resolution);
+  ledcAttachPin(deflateMotorBin1, pwmDeflate); 
+
+  //turn everything off initially
+  digitalWrite(inflateMotorAin1, LOW);
+  digitalWrite(inflateMotorAin2, LOW);
+  digitalWrite(deflateMotorBin1, LOW);
+  digitalWrite(deflateMotorBin2, LOW);
   digitalWrite(valve, LOW);
 
   // Serial Setup & OLED Setup
@@ -244,23 +268,26 @@ void loop()
 }
 
 //===================Operation Mode Methods===============
-void motorON(int motorPin)
+//pwm
+void motorON(int pwmPin, int dc)
 {
-  digitalWrite(motorPin, HIGH);
+  //if invalid dc, default to max
+  (dc > maxDutyCycle || dc < 0) ? ledcWrite(pwmPin, maxDutyCycle) : ledcWrite(pwmPin, dc);
   // update both motor booleans.
-  inflateMotorIsOn = (motorPin == inflateMotor) ? true : false;
-  deflateMotorIsOn = (motorPin == deflateMotor) ? true : false;
+  inflateMotorIsOn = (pwmPin == pwmInflate) ? true : false;
+  deflateMotorIsOn = (pwmPin == pwmDeflate) ? true : false;
 
   // switch valve if deflate motor is activated, else keep it in the (default) inflate position
-  (motorPin == deflateMotor) ? valveON() : valveOFF();
+  deflateMotorIsOn ? valveON() : valveOFF();
 }
 
-void motorOFF(int motorPin)
+//pwm
+void motorOFF(int pwmPin)
 {
-  digitalWrite(motorPin, LOW);
+  digitalWrite(pwmPin, 0);
   // update motor booleans
-  inflateMotorIsOn = (motorPin == inflateMotor) ? false : true;
-  deflateMotorIsOn = (motorPin == deflateMotor) ? false : true;
+  inflateMotorIsOn = (pwmPin == pwmInflate) ? false : true;
+  deflateMotorIsOn = (pwmPin == pwmDeflate) ? false : true;
 }
 
 // default valve position
@@ -279,8 +306,8 @@ void valveON()
 // turns off both motors, sets valve to default position
 void standby()
 {
-  motorOFF(inflateMotor);
-  motorOFF(deflateMotor);
+  motorOFF(pwmInflate);
+  motorOFF(pwmDeflate);
   valveOFF();
 }
 
@@ -291,13 +318,13 @@ bool inflateBladder()
   {
     // Serial.println("Inflate\nTarget: " + String(data.inflateTargetPressure) + " PSI\tCurrent: " + String(currentBladderPressure) + " PSI");
     valveOFF();
-    motorON(inflateMotor);
+    motorON(pwmInflate, data.dutyCycle);
   }
   // stop inflating and hold at target pressure
   else
   {
     valveOFF();
-    motorOFF(inflateMotor);
+    motorOFF(pwmInflate);
     if (startHold)
     {
       Serial.println("Begin Hold");
@@ -331,16 +358,16 @@ bool deflateBladder()
   if (currentBladderPressure >= data.deflateTargetPressure)
   {
     Serial.println("Deflate\nTarget: " + String(data.deflateTargetPressure) + " PSI\tCurrent: " + String(currentBladderPressure) + " PSI");
-    motorOFF(inflateMotor);
+    motorOFF(pwmInflate);
     valveON();
-    motorON(deflateMotor);
+    motorON(pwmDeflate, maxDutyCycle);
   }
   // turn off deflate motor
   else
   {
     Serial.println("Deflate Pressure Threshold Exceeded");
     valveOFF();
-    motorOFF(deflateMotor);
+    motorOFF(pwmDeflate);
     return true;
   }
   return false;
@@ -489,6 +516,7 @@ void printStructContents()
   Serial.println("inflate target pressure (psi): " + String(data.inflateTargetPressure));
   Serial.println("deflate target pressure (psi): " + String(data.deflateTargetPressure));
   Serial.println("hold time(s): " + String(data.holdTime));
+  Serial.println("duty cycle: " + String(data.dutyCycle));
 }
 
 //===================BLE Methods===================
