@@ -28,8 +28,7 @@ void drawString(String);
 void standby();
 void freeRun();
 void cycleRun();
-void eStopEnabledHandler();
-void eStopDisabledHandler();
+void eStopISR();
 bool inflateBladder();
 bool deflateBladder();
 float readPressureSensor();
@@ -85,7 +84,7 @@ class MyServerCallbacks : public BLEServerCallbacks
 
   void onDisconnect(BLEServer *pServer)
   {
-    //Serial.println("Device Disconnected");
+    Serial.println("Device Disconnected");
     deviceConnected = false;
     standby();
   }
@@ -135,6 +134,9 @@ void setup()
   ledcAttachPin(inflateMotorAin1, pwmInflate); 
   ledcSetup(pwmDeflate, freq, resolution);
   ledcAttachPin(deflateMotorBin1, pwmDeflate); 
+
+  //setup interrupt for eStop
+  attachInterrupt(eStopSwitch, eStopISR, CHANGE);
 
   //turn everything off initially
   digitalWrite(inflateMotorAin1, LOW);
@@ -199,16 +201,20 @@ void loop()
     pTxCharacteristic->notify();
     delay(10); // bluetooth stack will go into congestion if too many packets are sent
 
-    bool eStopSwitchStatus = digitalRead(eStopSwitch);
-    Serial.println(String(eStopSwitchStatus));
-
-    if (!eStopSwitchStatus || eStopInterruptEnabled)
+    if (eStopInterruptEnabled)
     {
-      eStopEnabledHandler();
-    }
-    else if (eStopSwitchStatus && !eStopInterruptEnabled)
-    {
-      eStopDisabledHandler();
+      // deflate bladder
+      ledcWrite(pwmInflate, 0);
+      if (!eStopDeflateComplete)
+      {
+        Serial.println("EStop - Deflating");
+        eStopDeflateComplete = deflateBladder();
+      }
+      // remain in standby once emergency deflate is complete
+      else 
+      {
+        standby();
+      }
     }
     else
     {
@@ -409,29 +415,20 @@ void cycleRun()
   }
 }
 
-void eStopEnabledHandler()
+void IRAM_ATTR eStopISR()
 {
   Serial.println("Power Disconnected OR EStop Enabled");
   eStopInterruptEnabled = true;
-  // deflate bladder
-  ledcWrite(pwmInflate, 0);
-  if (!eStopDeflateComplete)
+  if (!digitalRead(eStopSwitch))
   {
-    Serial.println("EStop - Deflating");
-    eStopDeflateComplete = deflateBladder();
+    eStopInterruptEnabled = true;
+    Serial.println("estop bool true");
   }
-  // remain in standby once emergency deflate is complete
-  else 
+  else
   {
-    standby();
+    eStopInterruptEnabled = false;
+    Serial.println("estop bool false");
   }
-}
-
-void eStopDisabledHandler() 
-{
-  eStopInterruptEnabled = false;
-  eStopDeflateComplete = false;
-  operationMode = STANDBY;
 }
 
 float readPressureSensor()

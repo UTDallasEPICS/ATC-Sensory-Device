@@ -19,6 +19,7 @@ The following instructions assume the following are downloaded/added:
 2. Under quick access > micellaneous click on New Terminal
 3. To build the project enter `pio run` in the command line
 4. To build and run the project enter `pio run --target upload`in the command line
+5. If issues with port connection occur, ensure appropriate drivers are downloaded from this link: https://www.silabs.com/developers/usb-to-uart-bridge-vcp-drivers?tab=downloads 
 
 ### Credits
 
