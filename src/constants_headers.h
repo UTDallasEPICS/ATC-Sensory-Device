@@ -12,10 +12,10 @@
 
 // GPIO Pins
 const int inflateMotorAin1 = 20;
-const int inflateMotorAin2 = 7; //verify pins for in2
-const int deflateMotorBin1 = 19;
+const int inflateMotorAin2 = 19 //verify pins for in2
+const int deflateMotorBin1 = 7;
 const int deflateMotorBin2 = 6;
-const int valve = 34; 
+//const int valve = 34; 
 const int eStopSwitch = 1; 
 
 //PWM characteristics
