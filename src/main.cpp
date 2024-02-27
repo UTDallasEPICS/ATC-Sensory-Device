@@ -154,10 +154,10 @@ void setup()
   if (!status)
   {
     drawString("MPRLS Undetected, Cannot Proceed");
-    /*while (!status)
+    while (!status)
     {
       delay(10);
-    }*/
+    }
   }
   else
   {
