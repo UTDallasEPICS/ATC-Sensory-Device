@@ -12,24 +12,17 @@
 
 // GPIO Pins
 const int inflateMotorAin1 = 20;
-const int inflateMotorAin2 = 19; //verify pins for in2
+const int inflateMotorAin2 = 19;
 const int deflateMotorBin1 = 7;
 const int deflateMotorBin2 = 6;
-//const int valve = 34; 
-const int eStopSwitch = 1; 
+const int eStopSwitch = 1;
 
-//PWM characteristics
+// PWM motor control characteristics
 const int freq = 500;
 const int pwmInflate = 0;
 const int pwmDeflate = 1;
 const int resolution = 8;
-const int maxDutyCycle = (int) (pow(2, resolution)) - 1;
-/*
-const int inflateMotor = 20; // inflate Motor GPIO Pin
-const int deflateMotor = 19; // deflate Motor GPIO Pin
-const int valve = 34;        // Valve GPIO Pin
-const int eStopSwitch = 1;   // E-Stop GPIO Pin
-*/
+const int maxDutyCycle = (int)(pow(2, resolution)) - 1;
 
 // Define BLE Service
 #define SERVICE_UUID "6E400001-B5A3-F393-E0A9-E50E24DCCA9E"           // UART service UUID
@@ -42,7 +35,7 @@ const byte IOS = 1;
 const byte ANDROID = 2;
 
 // Pressure Targets
-const int SAMPLING_PERIOD = 250; // for pressure sensor pressure
+const int SAMPLING_PERIOD = 250; // interval at which pressure is read from sensor and sent to mobile app
 const float PRESSURE_MAX = 16;
 const float INF_MARGIN = 0.1;
 const float DEF_MARGIN = 0.5;

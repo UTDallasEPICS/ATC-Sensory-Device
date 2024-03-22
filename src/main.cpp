@@ -37,6 +37,7 @@ float readPressureSensor();
 
 // Auxilliary Methods
 void printStructContents();
+String getBoolValue(bool);
 
 // BLE Fields
 BLEServer *pServer = NULL;
@@ -64,6 +65,7 @@ unsigned long holdStartTime = 0;
 float currentBladderPressure = 0.0;
 
 volatile bool eStopInterruptEnabled = false;
+bool eStopWasEnabled = false;
 bool eStopDeflateComplete = false;
 bool inflateMotorIsOn = false;
 bool deflateMotorIsOn = false;
@@ -82,11 +84,12 @@ class MyServerCallbacks : public BLEServerCallbacks
     {
         Serial.println("Device Connected");
         deviceConnected = true;
+        operationMode = STANDBY;
     }
 
     void onDisconnect(BLEServer *pServer)
     {
-        // Serial.println("Device Disconnected");
+        Serial.println("Device Disconnected");
         deviceConnected = false;
         standby();
     }
@@ -101,7 +104,18 @@ class MyCallbacks : public BLECharacteristicCallbacks
         std::string rxValue = pCharacteristic->getValue();
         memcpy(&data, rxValue.data(), rxValue.length());
         data.holdTime = data.holdTime * 1000; // convert hold time to ms
-        data.inflateTargetPressure += INF_MARGIN;
+
+        Serial.println("\nRaw bytes directly from app: ");
+        unsigned char *pointer = (unsigned char *)rxValue.data();
+        while (pointer < (unsigned char *)rxValue.data() + rxValue.length())
+        {
+            Serial.print((int)(*pointer), HEX);
+            Serial.print(" ");
+            pointer++;
+        }
+        Serial.println();
+
+        // data.inflateTargetPressure += INF_MARGIN;
         data.deflateTargetPressure = pressure_min - DEF_MARGIN;
         printStructContents();
 
@@ -124,8 +138,6 @@ class MyCallbacks : public BLECharacteristicCallbacks
 // Main method
 void setup()
 {
-    pinMode(35, OUTPUT);
-    digitalWrite(35, HIGH);
     // output pins setup
     pinMode(inflateMotorAin1, OUTPUT);
     pinMode(inflateMotorAin2, OUTPUT);
@@ -133,17 +145,15 @@ void setup()
     pinMode(deflateMotorBin2, OUTPUT);
     pinMode(eStopSwitch, INPUT);
 
-    // set up pins to generate pwms
+    // set up pins to use pwm functionality
     ledcSetup(pwmInflate, freq, resolution);
     ledcAttachPin(inflateMotorAin1, pwmInflate);
     ledcSetup(pwmDeflate, freq, resolution);
     ledcAttachPin(deflateMotorBin1, pwmDeflate);
 
     // turn everything off initially
-    digitalWrite(inflateMotorAin1, LOW);
-    digitalWrite(inflateMotorAin2, LOW);
-    digitalWrite(deflateMotorBin1, LOW);
-    digitalWrite(deflateMotorBin2, LOW);
+    ledcWrite(pwmInflate, 0);
+    ledcWrite(pwmDeflate, 0);
 
     // Serial Setup & OLED Setup
     Serial.begin(115200);
@@ -157,10 +167,10 @@ void setup()
     if (!status)
     {
         drawString("MPRLS Undetected, Cannot Proceed");
-        /*while (!status)
+        while (!status)
         {
             delay(10);
-        }*/
+        }
     }
     else
     {
@@ -168,7 +178,7 @@ void setup()
         delay(1000);
     }
 
-    pressure_min = readPressureSensor(); // determine ATM pressure
+    pressure_min = readPressureSensor(); // determine ambient pressure
     delay(1000);
 
     // Begin BluetoothLE GATT Server
@@ -198,20 +208,22 @@ void loop()
         // update OLED display
         drawMonitor(currentBladderPressure, data.inflateTargetPressure, pressure_min);
 
-        // transmit data to mobile device
+        // transmit pressure reading to mobile device
         pTxCharacteristic->setValue(currentBladderPressure);
         pTxCharacteristic->notify();
         delay(10); // bluetooth stack will go into congestion if too many packets are sent
 
+        // E-Stop Functionality
         bool eStopSwitchStatus = digitalRead(eStopSwitch);
-        Serial.println(String(eStopSwitchStatus));
 
         if (!eStopSwitchStatus || eStopInterruptEnabled)
         {
+            eStopWasEnabled = true;
             eStopEnabledHandler();
         }
-        else if (eStopSwitchStatus && !eStopInterruptEnabled)
+        else if (eStopSwitchStatus && !eStopInterruptEnabled && eStopWasEnabled)
         {
+            eStopWasEnabled = false;
             eStopDisabledHandler();
         }
         else
@@ -261,7 +273,6 @@ bool inflateBladder()
     // inflate bladder until pressure hits target pressure
     if (currentBladderPressure <= data.inflateTargetPressure)
     {
-        // Serial.println("Inflate\nTarget: " + String(data.inflateTargetPressure) + " PSI\tCurrent: " + String(currentBladderPressure) + " PSI");
         ledcWrite(pwmInflate, maxDutyCycle);
     }
     // stop inflating and hold at target pressure
@@ -331,7 +342,7 @@ void freeRun()
     {
         if (data.inflate)
         {
-            // Serial.println("Mode: FR, Inf");
+            Serial.println("Mode: FR, Inf");
             inflateOpComplete = inflateBladder();
             if (inflateOpComplete)
             {
@@ -421,7 +432,7 @@ void IRAM_ATTR isr()
 void eStopEnabledHandler()
 {
     Serial.println("Power Disconnected OR EStop Enabled");
-    digitalWrite(35, LOW);
+    digitalWrite(35, HIGH);
     // deflate bladder
     ledcWrite(pwmInflate, 0);
     if (!eStopDeflateComplete)
@@ -462,7 +473,26 @@ void printStructContents()
     Serial.println("stop: " + String(data.stop));
     Serial.println("inflate target pressure (psi): " + String(data.inflateTargetPressure));
     Serial.println("deflate target pressure (psi): " + String(data.deflateTargetPressure));
-    Serial.println("hold time(s): " + String(data.holdTime));
+    Serial.println("hold time(ms): " + String(data.holdTime));
+
+    // Print Raw Bytes from Struct
+    Serial.println("\nBytes from struct:");
+    unsigned char *pointer = (unsigned char *)&data;
+    while (pointer < (unsigned char *)&data + sizeof(DataReceived))
+    {
+        Serial.print((int)(*pointer), HEX);
+        Serial.print(" ");
+        pointer++;
+    }
+    Serial.print("\n");
+}
+
+String getBoolValue(bool v)
+{
+    if (v)
+        return "1";
+    else
+        return "0";
 }
 
 //===================BLE Methods===================
@@ -543,6 +573,6 @@ void drawMonitor(float pBladder, float pTarget, float pATM)
     Heltec.display->drawString(12, 15, String(String(pBladder, 1)));
 
     Heltec.display->drawXbm(0, 30, scope_icon_width, scope_icon_height, scope_icon_bits);
-    Heltec.display->drawString(12, 30, "ATM (psi) " + String(pATM));
+    Heltec.display->drawString(12, 30, "Atmos " + String(pATM));
     Heltec.display->display();
 }
